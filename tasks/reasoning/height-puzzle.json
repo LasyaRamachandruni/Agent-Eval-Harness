@@ -1,0 +1,26 @@
+{
+  "id": "height-puzzle",
+  "category": "reasoning",
+  "prompt": "Read puzzle.txt and answer its question. Reply with just the name.",
+  "files": {
+    "puzzle.txt": "Ana is taller than Ben.\nBen is taller than Cyrus.\nDee is taller than Ana.\nEmil is shorter than Dee but taller than Ana.\nWho is the second tallest?\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "Emil"
+    }
+  ],
+  "max_steps": 4,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "puzzle.txt"
+      }
+    },
+    {
+      "final": "Emil"
+    }
+  ]
+}

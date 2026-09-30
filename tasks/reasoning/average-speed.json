@@ -1,0 +1,23 @@
+{
+  "id": "average-speed",
+  "category": "reasoning",
+  "prompt": "A train travels 120 km in 1.5 hours, then 60 km in 0.5 hours. What is its average speed for the whole trip in km/h? Reply with just the number.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "90"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "(120 + 60) / (1.5 + 0.5)"
+      }
+    },
+    {
+      "final": "90"
+    }
+  ]
+}

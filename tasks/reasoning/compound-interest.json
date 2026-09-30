@@ -1,0 +1,23 @@
+{
+  "id": "compound-interest",
+  "category": "reasoning",
+  "prompt": "You invest 1000 at 5% interest per year, compounded yearly. How much do you have after 3 years, rounded to 2 decimal places? Reply with just the number.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "1157.63"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "1000 * 1.05 ** 3"
+      }
+    },
+    {
+      "final": "1157.63"
+    }
+  ]
+}

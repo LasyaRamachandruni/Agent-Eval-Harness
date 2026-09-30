@@ -1,0 +1,23 @@
+{
+  "id": "unit-price",
+  "category": "reasoning",
+  "prompt": "A box of 12 pens costs 30.60. At the same price per pen, what do 7 pens cost? Reply with just the number, to 2 decimal places.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "17.85"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "30.60 / 12 * 7"
+      }
+    },
+    {
+      "final": "17.85"
+    }
+  ]
+}

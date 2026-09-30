@@ -1,0 +1,23 @@
+{
+  "id": "percent-change",
+  "category": "reasoning",
+  "prompt": "A ticket price went from 80 to 92. By what percent did it increase? Reply with just the number, without the % sign.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "15"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "(92 - 80) / 80 * 100"
+      }
+    },
+    {
+      "final": "15"
+    }
+  ]
+}

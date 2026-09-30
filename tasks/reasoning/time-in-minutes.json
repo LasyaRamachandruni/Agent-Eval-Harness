@@ -1,0 +1,23 @@
+{
+  "id": "time-in-minutes",
+  "category": "reasoning",
+  "prompt": "A workshop lasts 3.5 hours and is followed by a 45 minute Q&A. How many minutes is that in total? Reply with just the number.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "255"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "3.5 * 60 + 45"
+      }
+    },
+    {
+      "final": "255"
+    }
+  ]
+}

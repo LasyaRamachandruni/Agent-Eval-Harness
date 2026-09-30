@@ -1,0 +1,23 @@
+{
+  "id": "days-between",
+  "category": "reasoning",
+  "prompt": "How many days are there from 2026-03-01 to 2026-04-15? Count the difference between the dates (so from Monday to Tuesday is 1 day). Reply with just the number.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "45"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "31 + 14"
+      }
+    },
+    {
+      "final": "45"
+    }
+  ]
+}
