@@ -1,0 +1,26 @@
+{
+  "id": "largest-order",
+  "category": "files",
+  "prompt": "Which customer placed the single largest order in orders.csv? Reply with just their name.",
+  "files": {
+    "orders.csv": "order_id,customer,amount\n1001,Keiko,45.00\n1002,Luis,120.50\n1003,Keiko,99.99\n1004,Amara,310.00\n1005,Luis,15.25\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "Amara"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "orders.csv"
+      }
+    },
+    {
+      "final": "Amara"
+    }
+  ]
+}

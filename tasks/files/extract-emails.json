@@ -1,0 +1,38 @@
+{
+  "id": "extract-emails",
+  "category": "files",
+  "prompt": "Write every email address from contacts.txt into emails.txt, one per line, in the order they appear. Reply with the number of addresses you found.",
+  "files": {
+    "contacts.txt": "Priya Shah - priya@example.com - Design\nTom Ueda - tom.ueda@example.org - Sales\nFront desk - no email\nNia Brooks - nia.b@example.net - Support\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "emails.txt",
+      "value": "priya@example.com\ntom.ueda@example.org\nnia.b@example.net"
+    },
+    {
+      "type": "answer_equals",
+      "value": "3"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "contacts.txt"
+      }
+    },
+    {
+      "tool": "write_file",
+      "args": {
+        "path": "emails.txt",
+        "content": "priya@example.com\ntom.ueda@example.org\nnia.b@example.net\n"
+      }
+    },
+    {
+      "final": "3"
+    }
+  ]
+}

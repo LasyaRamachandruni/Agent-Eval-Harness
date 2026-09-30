@@ -1,0 +1,49 @@
+{
+  "id": "merge-guest-lists",
+  "category": "files",
+  "prompt": "Combine the names in guests_a.txt and guests_b.txt into guests_all.txt: one name per line, no duplicates, sorted alphabetically. Do not change the original files. Reply 'done' when finished.",
+  "files": {
+    "guests_a.txt": "Zoe\nAli\nMina\n",
+    "guests_b.txt": "Ali\nBruno\nZoe\nChen\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "guests_all.txt",
+      "value": "Ali\nBruno\nChen\nMina\nZoe"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "guests_a.txt"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "guests_b.txt"
+    }
+  ],
+  "max_steps": 6,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "guests_a.txt"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "guests_b.txt"
+      }
+    },
+    {
+      "tool": "write_file",
+      "args": {
+        "path": "guests_all.txt",
+        "content": "Ali\nBruno\nChen\nMina\nZoe\n"
+      }
+    },
+    {
+      "final": "done"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "average-score",
+  "category": "files",
+  "prompt": "What is the average score in grades.csv, rounded to 2 decimal places? Reply with just the number.",
+  "files": {
+    "grades.csv": "student,score\ns1,88\ns2,92\ns3,75\ns4,64\ns5,91\ns6,80\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "81.67"
+    }
+  ],
+  "max_steps": 6,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "grades.csv"
+      }
+    },
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "(88 + 92 + 75 + 64 + 91 + 80) / 6"
+      }
+    },
+    {
+      "final": "81.67"
+    }
+  ]
+}

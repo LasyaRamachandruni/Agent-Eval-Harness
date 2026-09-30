@@ -1,0 +1,26 @@
+{
+  "id": "count-errors",
+  "category": "files",
+  "prompt": "How many lines in app.log are ERROR lines? Reply with just the number.",
+  "files": {
+    "app.log": "2026-09-01 10:00 INFO start\n2026-09-01 10:01 ERROR disk full\n2026-09-01 10:02 INFO retry\n2026-09-01 10:03 ERROR disk full\n2026-09-01 10:04 WARN slow\n2026-09-01 10:05 ERROR timeout\n2026-09-01 10:06 INFO done\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "3"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "app.log"
+      }
+    },
+    {
+      "final": "3"
+    }
+  ]
+}

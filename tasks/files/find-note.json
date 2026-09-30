@@ -1,0 +1,33 @@
+{
+  "id": "find-note",
+  "category": "files",
+  "prompt": "One of the files under notes/ mentions a passport. Which file is it? Reply with just its path.",
+  "files": {
+    "notes/monday.txt": "Standup at 9. Review the budget draft.\n",
+    "notes/tuesday.txt": "Dentist at 3pm. Pick up dry cleaning.\n",
+    "notes/wednesday.txt": "Renew passport before the Lisbon trip.\n",
+    "notes/thursday.txt": "Team lunch. Send slides to Omar.\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "notes/wednesday.txt"
+    }
+  ],
+  "max_steps": 8,
+  "solution": [
+    {
+      "tool": "list_files",
+      "args": {}
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "notes/wednesday.txt"
+      }
+    },
+    {
+      "final": "notes/wednesday.txt"
+    }
+  ]
+}
