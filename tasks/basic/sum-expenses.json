@@ -1,0 +1,15 @@
+{
+  "id": "sum-expenses",
+  "category": "files",
+  "prompt": "What is the total of the amount column in expenses.csv? Reply with just the number.",
+  "files": {
+    "expenses.csv": "item,amount\ncoffee,4.50\nlunch,12.25\nbooks,38\ntrain,7.75\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "62.5"
+    }
+  ],
+  "max_steps": 6
+}

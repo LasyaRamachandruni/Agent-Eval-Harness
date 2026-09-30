@@ -1,0 +1,15 @@
+{
+  "id": "missing-file",
+  "category": "robustness",
+  "prompt": "Read report.txt and tell me its first line. If the file does not exist, reply exactly: NOT FOUND",
+  "files": {
+    "notes.txt": "nothing here\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "NOT FOUND"
+    }
+  ],
+  "max_steps": 5
+}

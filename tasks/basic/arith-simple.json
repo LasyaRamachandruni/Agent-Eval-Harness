@@ -1,0 +1,12 @@
+{
+  "id": "arith-simple",
+  "category": "reasoning",
+  "prompt": "Use the calculator to compute (1234 * 56) - 789. Reply with just the number.",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "68315"
+    }
+  ],
+  "max_steps": 5
+}

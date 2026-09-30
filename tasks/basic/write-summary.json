@@ -1,0 +1,20 @@
+{
+  "id": "write-summary",
+  "category": "files",
+  "prompt": "Read todo.txt and write a file called done.txt that lists only the items marked [x], one per line, without the [x] marker. Then reply 'done'.",
+  "files": {
+    "todo.txt": "[x] book flights\n[ ] renew passport\n[x] pay rent\n[ ] call dentist\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "done.txt",
+      "value": "book flights\npay rent"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "todo.txt"
+    }
+  ],
+  "max_steps": 6
+}

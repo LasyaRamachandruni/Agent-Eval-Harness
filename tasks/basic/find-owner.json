@@ -1,0 +1,16 @@
+{
+  "id": "find-owner",
+  "category": "files",
+  "prompt": "Which person owns the 'billing' service according to the files in the workspace? Reply with just their name.",
+  "files": {
+    "services.txt": "auth -> team-a\nbilling -> team-c\nsearch -> team-b\n",
+    "teams.txt": "team-a: Priya\nteam-b: Marco\nteam-c: Dana\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "Dana"
+    }
+  ],
+  "max_steps": 6
+}
