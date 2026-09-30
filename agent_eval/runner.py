@@ -12,6 +12,7 @@ from typing import Callable
 from .agent import AgentResult, run_agent
 from .metrics import success_variance, suite_pass_at_k, suite_pass_hat_k
 from .models import ModelClient
+from .pricing import estimate_cost
 from .tasks import CheckResult, Task, run_check
 from .tools import Workspace, build_tools
 
@@ -63,11 +64,24 @@ def _avg(xs: list[float], digits: int = 2) -> float:
     return round(sum(xs) / len(xs), digits) if xs else 0.0
 
 
-def summarize(runs: list[TaskRun]) -> dict:
-    """Aggregate runs into success, consistency and efficiency numbers.
+def run_cost(run: TaskRun, prices: dict | None = None) -> float | None:
+    """Estimated USD cost of one run (None if the model has no known price)."""
+    return estimate_cost(run.model, run.agent.input_tokens, run.agent.output_tokens, prices)
+
+
+def _avg_cost(runs: list[TaskRun], prices: dict | None) -> float | None:
+    costs = [run_cost(r, prices) for r in runs]
+    if any(c is None for c in costs):
+        return None
+    return round(sum(costs) / len(costs), 6)
+
+
+def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
+    """Aggregate runs into success, consistency, efficiency and cost numbers.
 
     Runs are grouped by task, so repeated trials of the same task feed pass@k,
-    pass^k and per-task variance.
+    pass^k and per-task variance. Costs are estimates from `pricing.PRICES`
+    (or the `prices` table given) and are None for models without a price.
     """
     n = len(runs)
     if n == 0:
@@ -78,6 +92,7 @@ def summarize(runs: list[TaskRun]) -> dict:
     outcomes = {tid: [r.passed for r in rs] for tid, rs in by_task.items()}
     repeats = min(len(o) for o in outcomes.values())
     passed = sum(r.passed for r in runs)
+    avg_cost = _avg_cost(runs, prices)
 
     per_task = {}
     for tid, rs in by_task.items():
@@ -91,6 +106,7 @@ def summarize(runs: list[TaskRun]) -> dict:
             "avg_steps": _avg([r.agent.num_steps for r in rs]),
             "avg_tokens": _avg([r.agent.input_tokens + r.agent.output_tokens for r in rs], 1),
             "avg_seconds": _avg([r.agent.seconds for r in rs], 3),
+            "avg_cost_usd": _avg_cost(rs, prices),
         }
 
     by_cat: dict[str, list[TaskRun]] = {}
@@ -115,6 +131,8 @@ def summarize(runs: list[TaskRun]) -> dict:
         "tool_errors": sum(r.agent.tool_errors for r in runs),
         "input_tokens": sum(r.agent.input_tokens for r in runs),
         "output_tokens": sum(r.agent.output_tokens for r in runs),
+        "avg_cost_per_run_usd": avg_cost,
+        "total_cost_usd": None if avg_cost is None else round(avg_cost * n, 6),
         "by_category": {
             c: {
                 "tasks": len({r.task_id for r in rs}),
@@ -128,7 +146,7 @@ def summarize(runs: list[TaskRun]) -> dict:
     }
 
 
-def save_results(runs: list[TaskRun], out_dir: str | Path) -> Path:
+def save_results(runs: list[TaskRun], out_dir: str | Path, prices: dict | None = None) -> Path:
     """Write one JSONL line per task (with full trace) plus a summary.json."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     model_slug = runs[0].model.replace(":", "_").replace("/", "_") if runs else "none"
@@ -137,5 +155,5 @@ def save_results(runs: list[TaskRun], out_dir: str | Path) -> Path:
     with open(run_dir / "runs.jsonl", "w") as f:
         for r in runs:
             f.write(json.dumps(asdict(r)) + "\n")
-    (run_dir / "summary.json").write_text(json.dumps(summarize(runs), indent=2))
+    (run_dir / "summary.json").write_text(json.dumps(summarize(runs, prices), indent=2))
     return run_dir

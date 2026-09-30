@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from .models import load_model
+from .pricing import load_prices
 from .runner import TaskRun, run_suite, save_results, summarize
 from .tasks import load_tasks
 
@@ -25,6 +26,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.only:
         wanted = set(args.only.split(","))
         tasks = [t for t in tasks if t.id in wanted]
+    prices = load_prices(args.prices) if args.prices else None
     model = load_model(args.model)
 
     def show(run: TaskRun) -> None:
@@ -37,8 +39,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     print(f"        - {c.type}: {c.detail}")
 
     runs = run_suite(model, tasks, repeats=args.repeats, on_run=show)
-    s = summarize(runs)
-    out = save_results(runs, args.out)
+    s = summarize(runs, prices)
+    out = save_results(runs, args.out, prices)
     print()
     print(format_summary(s))
     print(f"results: {out}")
@@ -61,6 +63,10 @@ def format_summary(s: dict) -> str:
         f"avg {s['avg_steps']} steps, {s['avg_input_tokens'] + s['avg_output_tokens']:.0f} tokens, "
         f"{s['avg_seconds']}s per run; {s['tool_errors']} tool errors"
     )
+    if s.get("total_cost_usd") is not None:
+        lines.append(f"estimated cost ${s['total_cost_usd']:.4f} (${s['avg_cost_per_run_usd']:.5f} per run)")
+    else:
+        lines.append("estimated cost: unknown for this model (pass --prices to set one)")
     return "\n".join(lines)
 
 
@@ -77,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--tasks", default="tasks")
     pr.add_argument("--only", help="comma-separated task ids to run")
     pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
+    pr.add_argument("--prices", help="JSON file of per-model prices, e.g. {\"openai:gpt-4o\": [2.5, 10]}")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
