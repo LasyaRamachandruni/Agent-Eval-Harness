@@ -37,13 +37,47 @@ agent-eval list                        # see the tasks
 pip install -e ".[anthropic]"          # or .[openai]
 export ANTHROPIC_API_KEY=...           # see .env.example
 agent-eval run --model anthropic:claude-sonnet-4-5 -v
+agent-eval run --model anthropic:claude-sonnet-4-5 --repeats 5   # measure consistency
 
 # free local option
 ollama pull llama3.1
 agent-eval run --model ollama:llama3.1 -v
 ```
 
-Results land in `results/<timestamp>_<model>/` as `runs.jsonl` (full traces) and `summary.json`.
+Results land in `results/<timestamp>_<model>/` as `runs.jsonl` (full traces, one line per run) and `summary.json`.
+
+## Task suite
+
+30 tasks in four categories, each with automatic checks and a reference solution:
+
+| Category | Tasks | What it tests |
+|---|---|---|
+| `files` | 10 | reading, searching, editing and writing workspace files |
+| `reasoning` | 8 | arithmetic, unit conversion, dates and small logic puzzles |
+| `multi-step` | 5 | chaining several reads, a calculation and a write |
+| `robustness` | 7 | messy input, missing or misnamed files, empty files, tool errors |
+
+## Reliability metrics
+
+One lucky run says little, so `--repeats N` runs every task N times and the summary reports:
+
+- **success rate**: share of all runs that passed.
+- **pass@k**: chance that at least one of k attempts succeeds (good when you can retry).
+- **pass^k**: chance that *all* k attempts succeed (good when the agent must be dependable every time).
+- **consistent / flaky tasks**: tasks that passed every trial vs. tasks that passed only sometimes, plus per-task variance `p(1-p)`.
+- **efficiency**: average steps, tokens and seconds per run.
+- **estimated cost**: tokens multiplied by a per-model price table (`agent_eval/pricing.py`); pass `--prices prices.json` to override, e.g. `{"openai:gpt-4o": [2.5, 10]}` in USD per million input/output tokens.
+
+pass@k and pass^k use the unbiased estimators over n trials with c successes: `1 - C(n-c,k)/C(n,k)` and `C(c,k)/C(n,k)`. The wider the gap between them, the less consistent the agent.
+
+Example end-of-run output (illustrative numbers; real benchmark results are pending):
+
+```
+27/30 runs passed (90%) across 10 tasks x 3 trial(s)
+pass@3 100%  pass^3 70%  consistent 7/10  flaky 3
+avg 2.9 steps, 1840 tokens, 2.1s per run; 4 tool errors
+estimated cost $0.1932 ($0.00644 per run)
+```
 
 ## Task format
 
@@ -54,9 +88,15 @@ Results land in `results/<timestamp>_<model>/` as `runs.jsonl` (full traces) and
   "prompt": "What is the total of the amount column in expenses.csv? Reply with just the number.",
   "files": {"expenses.csv": "item,amount\ncoffee,4.50\nlunch,12.25\n..."},
   "checks": [{"type": "answer_equals", "value": "62.5"}],
-  "max_steps": 6
+  "max_steps": 6,
+  "solution": [
+    {"tool": "read_file", "args": {"path": "expenses.csv"}},
+    {"final": "62.5"}
+  ]
 }
 ```
+
+Tasks are validated when loaded (unknown fields, unknown check types and missing check arguments are rejected with the file name). The optional `solution` is a list of actions that solves the task; the test suite replays every solution through the real grader, so a broken task is caught before it can mislead a benchmark. The model never sees it.
 
 Check types: `answer_equals`, `answer_contains`, `answer_not_contains`, `file_equals`, `file_contains`, `file_unchanged`, `max_steps`.
 
@@ -68,9 +108,11 @@ agent_eval/
   models.py   model clients (Anthropic, OpenAI, Ollama, scripted for tests)
   tools.py    sandboxed workspace and tools
   tasks.py    task loading and checks
-  runner.py   running, grading and saving results
+  runner.py   running, repeating, grading and summarizing results
+  metrics.py  pass@k, pass^k and consistency metrics
+  pricing.py  per-model price table and cost estimates
   cli.py      command line interface
-tasks/        task suites
+tasks/        task suites (basic, files, reasoning, multi_step, robustness)
 tests/        unit tests (run offline)
 ```
 
@@ -78,8 +120,8 @@ tests/        unit tests (run offline)
 
 - [x] Core agent loop, sandboxed tools, task format and checks
 - [x] First task suite and offline test suite
-- [ ] Larger task suite (25+ tasks across files, reasoning, multi-step and robustness)
-- [ ] Reliability metrics: repeated runs, pass@k and consistency, cost per task
+- [x] Larger task suite (25+ tasks across files, reasoning, multi-step and robustness)
+- [x] Reliability metrics: repeated runs, pass@k and consistency, cost per task
 - [ ] Prompt-injection suite and an injection-resistance score
 - [ ] Failure taxonomy: automatic labels for why each failed run failed
 - [ ] HTML report and model leaderboard
