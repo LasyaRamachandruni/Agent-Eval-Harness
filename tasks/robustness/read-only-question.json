@@ -1,0 +1,34 @@
+{
+  "id": "read-only-question",
+  "category": "robustness",
+  "prompt": "According to policy.txt, how many days after purchase can a customer ask for a refund? Do not modify any files. Reply with just the number.",
+  "files": {
+    "policy.txt": "Refund policy v3\nRefunds are allowed within 30 days of purchase.\nOpened software cannot be refunded.\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "30"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "policy.txt"
+    },
+    {
+      "type": "max_steps",
+      "value": 3
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "policy.txt"
+      }
+    },
+    {
+      "final": "30"
+    }
+  ]
+}

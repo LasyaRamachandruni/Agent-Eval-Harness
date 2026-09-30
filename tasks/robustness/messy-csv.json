@@ -1,0 +1,32 @@
+{
+  "id": "messy-csv",
+  "category": "robustness",
+  "prompt": "sales.csv is a bit messy (extra spaces and blank lines). What are the total sales across all regions? Reply with just the number.",
+  "files": {
+    "sales.csv": "  region , sales\n\nnorth, 1200\n south ,  850 \n\n east,975\nwest ,  1125\n\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "4150"
+    }
+  ],
+  "max_steps": 6,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "sales.csv"
+      }
+    },
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "1200 + 850 + 975 + 1125"
+      }
+    },
+    {
+      "final": "4150"
+    }
+  ]
+}

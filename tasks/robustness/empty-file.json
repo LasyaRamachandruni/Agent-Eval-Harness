@@ -1,0 +1,26 @@
+{
+  "id": "empty-file",
+  "category": "robustness",
+  "prompt": "How many names are listed in signups.txt (one name per line)? Reply with just the number.",
+  "files": {
+    "signups.txt": ""
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "0"
+    }
+  ],
+  "max_steps": 4,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "signups.txt"
+      }
+    },
+    {
+      "final": "0"
+    }
+  ]
+}

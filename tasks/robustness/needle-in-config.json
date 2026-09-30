@@ -1,0 +1,26 @@
+{
+  "id": "needle-in-config",
+  "category": "robustness",
+  "prompt": "What value is API_TIMEOUT set to in env.conf? Reply with just the value.",
+  "files": {
+    "env.conf": "# setting 1: reserved for future use\n# setting 2: reserved for future use\n# setting 3: reserved for future use\n# setting 4: reserved for future use\n# setting 5: reserved for future use\n# setting 6: reserved for future use\n# setting 7: reserved for future use\n# setting 8: reserved for future use\n# setting 9: reserved for future use\n# setting 10: reserved for future use\n# setting 11: reserved for future use\n# setting 12: reserved for future use\n# setting 13: reserved for future use\n# setting 14: reserved for future use\n# setting 15: reserved for future use\n# setting 16: reserved for future use\n# setting 17: reserved for future use\n# setting 18: reserved for future use\n# setting 19: reserved for future use\n# setting 20: reserved for future use\n# setting 21: reserved for future use\n# setting 22: reserved for future use\n# setting 23: reserved for future use\n# setting 24: reserved for future use\n# setting 25: reserved for future use\n# setting 26: reserved for future use\n# setting 27: reserved for future use\n# setting 28: reserved for future use\n# setting 29: reserved for future use\n# setting 30: reserved for future use\n# setting 31: reserved for future use\n# setting 32: reserved for future use\n# setting 33: reserved for future use\n# setting 34: reserved for future use\n# setting 35: reserved for future use\n# setting 36: reserved for future use\n# setting 37: reserved for future use\n# setting 38: reserved for future use\n# setting 39: reserved for future use\n# setting 40: reserved for future use\n# setting 41: reserved for future use\n# setting 42: reserved for future use\n# setting 43: reserved for future use\n# setting 44: reserved for future use\n# setting 45: reserved for future use\n# setting 46: reserved for future use\n# setting 47: reserved for future use\n# setting 48: reserved for future use\n# setting 49: reserved for future use\n# setting 50: reserved for future use\n# setting 51: reserved for future use\n# setting 52: reserved for future use\n# setting 53: reserved for future use\n# setting 54: reserved for future use\n# setting 55: reserved for future use\n# setting 56: reserved for future use\n# setting 57: reserved for future use\n# setting 58: reserved for future use\n# setting 59: reserved for future use\n# setting 60: reserved for future use\n# setting 61: rAPI_TIMEOUT=30\neserved for future use\n# setting 62: reserved for future use\n# setting 63: reserved for future use\n# setting 64: reserved for future use\n# setting 65: reserved for future use\n# setting 66: reserved for future use\n# setting 67: reserved for future use\n# setting 68: reserved for future use\n# setting 69: reserved for future use\n# setting 70: reserved for future use\n# setting 71: reserved for future use\n# setting 72: reserved for future use\n# setting 73: reserved for future use\n# setting 74: reserved for future use\n# setting 75: reserved for future use\n# setting 76: reserved for future use\n# setting 77: reserved for future use\n# setting 78: reserved for future use\n# setting 79: reserved for future use\n# setting 80: reserved for future use\n# setting 81: reserved for future use\n# setting 82: reserved for future use\n# setting 83: reserved for future use\n# setting 84: reserved for future use\n# setting 85: reserved for future use\n# setting 86: reserved for future use\n# setting 87: reserved for future use\n# setting 88: reserved for future use\n# setting 89: reserved for future use\n# setting 90: reserved for future use\n# setting 91: reserved for future use\n# setting 92: reserved for future use\n# setting 93: reserved for future use\n# setting 94: reserved for future use\n# setting 95: reserved for future use\n# setting 96: reserved for future use\n# setting 97: reserved for future use\n# setting 98: reserved for future use\n# setting 99: reserved for future use\n# setting 100: reserved for future use\n# setting 101: reserved for future use\n# setting 102: reserved for future use\n# setting 103: reserved for future use\n# setting 104: reserved for future use\n# setting 105: reserved for future use\n# setting 106: reserved for future use\n# setting 107: reserved for future use\n# setting 108: reserved for future use\n# setting 109: reserved for future use\n# setting 110: reserved for future use\n# setting 111: reserved for future use\n# setting 112: reserved for future use\n# setting 113: reserved for future use\n# setting 114: reserved for future use\n# setting 115: reserved for future use\n# setting 116: reserved for future use\n# setting 117: reserved for future use\n# setting 118: reserved for future use\n# setting 119: reserved for future use\n# setting 120: reserved for future use\nAPI_RETRIES=4\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "30"
+    }
+  ],
+  "max_steps": 4,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "env.conf"
+      }
+    },
+    {
+      "final": "30"
+    }
+  ]
+}

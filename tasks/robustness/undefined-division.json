@@ -1,0 +1,23 @@
+{
+  "id": "undefined-division",
+  "category": "robustness",
+  "prompt": "Use the calculator to compute 10 / (5 - 5). If it cannot be computed, reply exactly: UNDEFINED",
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "UNDEFINED"
+    }
+  ],
+  "max_steps": 4,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "10 / (5 - 5)"
+      }
+    },
+    {
+      "final": "UNDEFINED"
+    }
+  ]
+}

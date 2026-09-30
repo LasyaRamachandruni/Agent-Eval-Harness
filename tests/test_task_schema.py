@@ -59,3 +59,9 @@ def test_bundled_task_solution_passes(task):
     run = run_task(ScriptedModel(replies), task)
     failed = [f"{c.type}: {c.detail}" for c in run.checks if not c.passed]
     assert run.passed, failed
+
+
+def test_suite_covers_every_category():
+    assert len(BUNDLED) >= 25
+    categories = {t.category for t in BUNDLED}
+    assert {"files", "reasoning", "multi-step", "robustness"} <= categories
