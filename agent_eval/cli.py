@@ -10,7 +10,7 @@ import argparse
 import sys
 
 from .models import load_model
-from .runner import run_task, save_results, summarize
+from .runner import TaskRun, run_suite, save_results, summarize
 from .tasks import load_tasks
 
 
@@ -26,22 +26,42 @@ def _cmd_run(args: argparse.Namespace) -> int:
         wanted = set(args.only.split(","))
         tasks = [t for t in tasks if t.id in wanted]
     model = load_model(args.model)
-    runs = []
-    for t in tasks:
-        run = run_task(model, t)
+
+    def show(run: TaskRun) -> None:
         mark = "PASS" if run.passed else "FAIL"
-        print(f"[{mark}] {t.id:<28} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}")
+        trial = f" #{run.trial + 1}" if args.repeats > 1 else ""
+        print(f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}")
         if not run.passed and args.verbose:
             for c in run.checks:
                 if not c.passed:
                     print(f"        - {c.type}: {c.detail}")
-        runs.append(run)
+
+    runs = run_suite(model, tasks, repeats=args.repeats, on_run=show)
     s = summarize(runs)
     out = save_results(runs, args.out)
-    print(f"\n{s['passed']}/{s['tasks']} passed ({s['success_rate']:.0%}), "
-          f"avg {s['avg_steps']} steps, {s['tool_errors']} tool errors")
+    print()
+    print(format_summary(s))
     print(f"results: {out}")
     return 0
+
+
+def format_summary(s: dict) -> str:
+    """Human-readable summary lines for the end of a run."""
+    k = s["repeats"]
+    lines = [
+        f"{s['passed']}/{s['runs']} runs passed ({s['success_rate']:.0%}) "
+        f"across {s['tasks']} tasks x {k} trial(s)",
+    ]
+    if k > 1:
+        lines.append(
+            f"pass@{k} {s['pass_at_k'][str(k)]:.0%}  pass^{k} {s['pass_hat_k'][str(k)]:.0%}  "
+            f"consistent {s['consistent_tasks']}/{s['tasks']}  flaky {s['flaky_tasks']}"
+        )
+    lines.append(
+        f"avg {s['avg_steps']} steps, {s['avg_input_tokens'] + s['avg_output_tokens']:.0f} tokens, "
+        f"{s['avg_seconds']}s per run; {s['tool_errors']} tool errors"
+    )
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--model", required=True, help="e.g. anthropic:claude-sonnet-4-5, openai:gpt-4o-mini, ollama:llama3.1")
     pr.add_argument("--tasks", default="tasks")
     pr.add_argument("--only", help="comma-separated task ids to run")
+    pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
