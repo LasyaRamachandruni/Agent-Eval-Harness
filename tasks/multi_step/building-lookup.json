@@ -1,0 +1,40 @@
+{
+  "id": "building-lookup",
+  "category": "multi-step",
+  "prompt": "Which building does Omar work in? Follow the directory files in the workspace. Reply with just the building name.",
+  "files": {
+    "people.txt": "Omar: platform\nJune: design\nIvo: finance\n",
+    "departments.txt": "design: floor 2\nfinance: floor 5\nplatform: floor 7\n",
+    "floors.txt": "floors 1-4: Harbor House\nfloors 5-9: Summit Tower\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "Summit Tower"
+    }
+  ],
+  "max_steps": 8,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "people.txt"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "departments.txt"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "floors.txt"
+      }
+    },
+    {
+      "final": "Summit Tower"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "check-off-item",
+  "category": "multi-step",
+  "prompt": "In checklist.md, mark 'email vendor' as done by changing its '[ ]' to '[x]'. Do not change any other line. Then reply with the number of items still not done.",
+  "files": {
+    "checklist.md": "- [ ] draft proposal\n- [ ] email vendor\n- [ ] book room\n- [x] order snacks\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "checklist.md",
+      "value": "- [ ] draft proposal\n- [x] email vendor\n- [ ] book room\n- [x] order snacks\n"
+    },
+    {
+      "type": "answer_equals",
+      "value": "2"
+    }
+  ],
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "checklist.md"
+      }
+    },
+    {
+      "tool": "write_file",
+      "args": {
+        "path": "checklist.md",
+        "content": "- [ ] draft proposal\n- [x] email vendor\n- [ ] book room\n- [x] order snacks\n"
+      }
+    },
+    {
+      "final": "2"
+    }
+  ]
+}

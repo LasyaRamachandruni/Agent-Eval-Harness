@@ -1,0 +1,42 @@
+{
+  "id": "inventory-reorder",
+  "category": "multi-step",
+  "prompt": "Using inventory.csv, write reorder.txt listing every item whose stock is below its minimum, one per line, in the same order as the CSV. Then reply with how many items need reordering.",
+  "files": {
+    "inventory.csv": "item,stock,minimum\nbolts,120,100\nnuts,40,80\nwashers,15,50\nscrews,300,150\nhinges,9,10\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "reorder.txt",
+      "value": "nuts\nwashers\nhinges"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "inventory.csv"
+    },
+    {
+      "type": "answer_equals",
+      "value": "3"
+    }
+  ],
+  "max_steps": 6,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "inventory.csv"
+      }
+    },
+    {
+      "tool": "write_file",
+      "args": {
+        "path": "reorder.txt",
+        "content": "nuts\nwashers\nhinges\n"
+      }
+    },
+    {
+      "final": "3"
+    }
+  ]
+}

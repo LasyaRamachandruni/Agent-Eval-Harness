@@ -1,0 +1,51 @@
+{
+  "id": "invoice-total",
+  "category": "multi-step",
+  "prompt": "order.txt lists items and quantities; prices.csv has unit prices. Compute the order total, write it to invoice.txt as 'TOTAL: <amount>' with 2 decimal places, and reply with just the amount (2 decimal places).",
+  "files": {
+    "prices.csv": "item,price\nnotebook,3.20\npen,1.15\nstapler,8.90\nfolder,0.75\n",
+    "order.txt": "pen x 4\nfolder x 10\nstapler x 1\n"
+  },
+  "checks": [
+    {
+      "type": "file_equals",
+      "path": "invoice.txt",
+      "value": "TOTAL: 21.00"
+    },
+    {
+      "type": "answer_equals",
+      "value": "21.00"
+    }
+  ],
+  "max_steps": 8,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "order.txt"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "prices.csv"
+      }
+    },
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "1.15 * 4 + 0.75 * 10 + 8.90 * 1"
+      }
+    },
+    {
+      "tool": "write_file",
+      "args": {
+        "path": "invoice.txt",
+        "content": "TOTAL: 21.00\n"
+      }
+    },
+    {
+      "final": "21.00"
+    }
+  ]
+}

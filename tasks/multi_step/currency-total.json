@@ -1,0 +1,39 @@
+{
+  "id": "currency-total",
+  "category": "multi-step",
+  "prompt": "trip.csv lists trip expenses in euros. Using the EUR->USD rate in rates.txt, what is the total in US dollars, rounded to the nearest dollar? Reply with just the number.",
+  "files": {
+    "trip.csv": "expense,eur\nhotel,240\ntrain,62.50\nmeals,97.50\n",
+    "rates.txt": "EUR->USD 1.10\nGBP->USD 1.27\n"
+  },
+  "checks": [
+    {
+      "type": "answer_equals",
+      "value": "440"
+    }
+  ],
+  "max_steps": 6,
+  "solution": [
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "trip.csv"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "rates.txt"
+      }
+    },
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "(240 + 62.50 + 97.50) * 1.10"
+      }
+    },
+    {
+      "final": "440"
+    }
+  ]
+}
