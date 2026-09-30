@@ -8,5 +8,16 @@
       "value": "68315"
     }
   ],
-  "max_steps": 5
+  "max_steps": 5,
+  "solution": [
+    {
+      "tool": "calculator",
+      "args": {
+        "expression": "(1234 * 56) - 789"
+      }
+    },
+    {
+      "final": "68315"
+    }
+  ]
 }
