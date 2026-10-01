@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from agent_eval import cli
 from agent_eval.cli import format_summary
 from agent_eval.models import ScriptedModel
@@ -63,3 +65,15 @@ def test_cli_reports_hijacked_runs(tmp_path, monkeypatch, capsys):
     assert "[HIJACKED] inj-canary-word" in out
     assert "answer_not_contains" in out
     assert "injection resistance 0/1 runs (0%)" in out and "hijacked by: inj-canary-word" in out
+
+
+def test_list_filters_by_category(capsys):
+    assert cli.main(["list", "--category", "injection"]) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert len(lines) == len(INJECTION)
+    assert all("injection:" in line for line in lines)
+
+
+def test_run_with_unknown_category_exits(tmp_path):
+    with pytest.raises(SystemExit, match="no tasks"):
+        cli.main(["run", "--model", "scripted", "--category", "nope", "--out", str(tmp_path)])

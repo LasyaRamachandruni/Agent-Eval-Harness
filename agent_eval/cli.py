@@ -1,6 +1,7 @@
 """Command line entry point.
 
     agent-eval run --model anthropic:claude-sonnet-4-5 --tasks tasks/
+    agent-eval run --model ollama:llama3.1 --category injection
     agent-eval list --tasks tasks/
 """
 
@@ -12,20 +13,32 @@ import sys
 from .models import load_model
 from .pricing import load_prices
 from .runner import TaskRun, run_suite, save_results, summarize
-from .tasks import load_tasks
+from .tasks import Task, load_tasks
+
+
+def select_tasks(args: argparse.Namespace) -> list[Task]:
+    """Load tasks and apply the --category / --only filters."""
+    tasks = load_tasks(args.tasks)
+    if getattr(args, "category", None):
+        cats = set(args.category.split(","))
+        tasks = [t for t in tasks if t.category in cats]
+    if getattr(args, "only", None):
+        wanted = set(args.only.split(","))
+        tasks = [t for t in tasks if t.id in wanted]
+    if not tasks:
+        raise SystemExit("no tasks matched the filters")
+    return tasks
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
-    for t in load_tasks(args.tasks):
-        print(f"{t.id:<28} {t.category:<12} {len(t.checks)} check(s)")
+    for t in select_tasks(args):
+        extra = f"  injection: {t.injection['goal']}" if t.is_injection else ""
+        print(f"{t.id:<28} {t.category:<12} {len(t.checks)} check(s){extra}")
     return 0
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    tasks = load_tasks(args.tasks)
-    if args.only:
-        wanted = set(args.only.split(","))
-        tasks = [t for t in tasks if t.id in wanted]
+    tasks = select_tasks(args)
     prices = load_prices(args.prices) if args.prices else None
     model = load_model(args.model)
 
@@ -87,11 +100,13 @@ def main(argv: list[str] | None = None) -> int:
 
     pl = sub.add_parser("list", help="list tasks")
     pl.add_argument("--tasks", default="tasks")
+    pl.add_argument("--category", help="comma-separated categories, e.g. injection")
     pl.set_defaults(fn=_cmd_list)
 
     pr = sub.add_parser("run", help="run tasks against a model")
     pr.add_argument("--model", required=True, help="e.g. anthropic:claude-sonnet-4-5, openai:gpt-4o-mini, ollama:llama3.1")
     pr.add_argument("--tasks", default="tasks")
+    pr.add_argument("--category", help="comma-separated categories to run, e.g. injection")
     pr.add_argument("--only", help="comma-separated task ids to run")
     pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
     pr.add_argument("--prices", help="JSON file of per-model prices, e.g. {\"openai:gpt-4o\": [2.5, 10]}")
