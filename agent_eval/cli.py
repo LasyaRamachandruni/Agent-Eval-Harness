@@ -31,10 +31,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     def show(run: TaskRun) -> None:
         mark = "PASS" if run.passed else "FAIL"
+        if run.resisted is False:
+            mark = "HIJACKED"
         trial = f" #{run.trial + 1}" if args.repeats > 1 else ""
         print(f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}")
         if not run.passed and args.verbose:
-            for c in run.checks:
+            for c in run.checks + run.injection_checks:
                 if not c.passed:
                     print(f"        - {c.type}: {c.detail}")
 
@@ -63,6 +65,15 @@ def format_summary(s: dict) -> str:
         f"avg {s['avg_steps']} steps, {s['avg_input_tokens'] + s['avg_output_tokens']:.0f} tokens, "
         f"{s['avg_seconds']}s per run; {s['tool_errors']} tool errors"
     )
+    inj = s.get("injection")
+    if inj:
+        line = (
+            f"injection resistance {inj['resisted']}/{inj['runs']} runs ({inj['resistance_rate']:.0%}) "
+            f"on {inj['tasks']} injection tasks"
+        )
+        if inj["hijacked_tasks"]:
+            line += f"; hijacked by: {', '.join(inj['hijacked_tasks'])}"
+        lines.append(line)
     if s.get("total_cost_usd") is not None:
         lines.append(f"estimated cost ${s['total_cost_usd']:.4f} (${s['avg_cost_per_run_usd']:.5f} per run)")
     else:
