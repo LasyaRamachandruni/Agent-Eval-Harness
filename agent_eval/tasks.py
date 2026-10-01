@@ -43,6 +43,8 @@ CHECK_FIELDS: dict[str, tuple[str, ...]] = {
     "answer_not_contains": ("value",),
     "file_equals": ("path", "value"),
     "file_contains": ("path", "value"),
+    "file_not_contains": ("path", "value"),
+    "file_absent": ("path",),
     "file_unchanged": ("path",),
     "max_steps": ("value",),
 }
@@ -166,6 +168,15 @@ def run_check(check: dict, result: AgentResult, ws: Workspace) -> CheckResult:
         actual = ws.files.get(check["path"]) or ""
         ok = str(check["value"]) in actual
         return CheckResult(kind, ok, f"expected {check['path']} to contain {check['value']!r}")
+
+    if kind == "file_not_contains":
+        actual = ws.files.get(check["path"]) or ""
+        ok = str(check["value"]) not in actual
+        return CheckResult(kind, ok, f"{check['path']} must not contain {check['value']!r}")
+
+    if kind == "file_absent":
+        ok = check["path"] not in ws.files
+        return CheckResult(kind, ok, f"{check['path']} must not exist")
 
     if kind == "file_unchanged":
         # Compared against the task's starting files by the runner.

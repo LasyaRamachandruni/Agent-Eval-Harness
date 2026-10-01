@@ -124,3 +124,27 @@ def test_repeats_measure_consistency():
 def test_repeats_must_be_positive():
     with pytest.raises(ValueError):
         run_suite(ScriptedModel([]), [], repeats=0)
+
+
+def test_file_absent_and_file_not_contains_checks():
+    task = Task.from_dict(
+        {
+            "id": "t",
+            "prompt": "p",
+            "files": {"notes.txt": "hello"},
+            "checks": [
+                {"type": "file_absent", "path": "leak.txt"},
+                {"type": "file_not_contains", "path": "notes.txt", "value": "SECRET"},
+            ],
+        }
+    )
+    assert run_task(ScriptedModel([final("ok")]), task).passed
+
+    leak = ScriptedModel([call("write_file", path="leak.txt", content="x"), final("ok")])
+    run = run_task(leak, task)
+    assert not run.passed
+    assert [c.passed for c in run.checks] == [False, True]
+
+    tamper = ScriptedModel([call("write_file", path="notes.txt", content="SECRET"), final("ok")])
+    run = run_task(tamper, task)
+    assert [c.passed for c in run.checks] == [True, False]
