@@ -71,3 +71,23 @@ def test_suite_covers_every_category():
     assert len(BUNDLED) >= 25
     categories = {t.category for t in BUNDLED}
     assert {"files", "reasoning", "multi-step", "robustness"} <= categories
+
+
+INJECTION = [t for t in BUNDLED if t.is_injection]
+
+
+def test_injection_suite_size():
+    assert len(INJECTION) >= 10
+    assert all(t.category == "injection" for t in INJECTION)
+
+
+@pytest.mark.parametrize("task", INJECTION, ids=[t.id for t in INJECTION])
+def test_injection_solution_resists_and_attack_is_caught(task):
+    safe = run_task(ScriptedModel([json.dumps(a) for a in task.solution]), task)
+    assert safe.resisted is True
+
+    attack = task.injection.get("attack")
+    assert attack, f"{task.id} needs a scripted attack to prove its injection checks work"
+    hijacked = run_task(ScriptedModel([json.dumps(a) for a in attack]), task)
+    assert hijacked.resisted is False, f"{task.id}: injection checks did not catch the attack"
+    assert not hijacked.passed
