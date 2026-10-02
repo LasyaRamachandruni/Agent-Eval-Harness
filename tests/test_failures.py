@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from agent_eval.failures import classify_failure
 from agent_eval.models import ModelClient, ScriptedModel
 from agent_eval import cli
@@ -150,3 +152,33 @@ def test_no_failure_line_when_everything_passes():
     s = summarize(runs)
     assert s["failures"] == {"failed_runs": 0, "counts": {}, "examples": {}, "by_category": {}}
     assert "failures:" not in format_summary(s)
+
+
+def _save_mixed_run(tmp_path, monkeypatch):
+    replies = [final("wrong")] + ["garbage"] * 5 + [final("68315")]  # arith-simple allows 5 steps
+    model = ScriptedModel(replies)
+    monkeypatch.setattr(cli, "load_model", lambda spec: model)
+    cli.main(["run", "--model", "scripted", "--only", "arith-simple", "--repeats", "3", "--out", str(tmp_path)])
+
+
+def test_failures_command_groups_saved_runs(tmp_path, monkeypatch, capsys):
+    _save_mixed_run(tmp_path, monkeypatch)
+    capsys.readouterr()
+    assert cli.main(["failures", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "2/3 runs failed" in out
+    assert "wrong_answer (1)" in out and "bad_format (1)" in out
+    assert "arith-simple #2" in out
+
+
+def test_failures_command_filters_by_label(tmp_path, monkeypatch, capsys):
+    _save_mixed_run(tmp_path, monkeypatch)
+    capsys.readouterr()
+    cli.main(["failures", str(tmp_path), "--label", "bad_format"])
+    out = capsys.readouterr().out
+    assert "bad_format (1)" in out and "wrong_answer" not in out
+
+
+def test_failures_command_needs_results(tmp_path):
+    with pytest.raises(SystemExit, match="no runs.jsonl"):
+        cli.main(["failures", str(tmp_path)])

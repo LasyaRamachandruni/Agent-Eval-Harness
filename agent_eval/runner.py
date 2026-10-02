@@ -243,3 +243,20 @@ def save_results(runs: list[TaskRun], out_dir: str | Path, prices: dict | None =
             f.write(json.dumps(asdict(r)) + "\n")
     (run_dir / "summary.json").write_text(json.dumps(summarize(runs, prices), indent=2))
     return run_dir
+
+
+def find_run_dir(path: str | Path) -> Path:
+    """Resolve `path` to a run directory: itself if it holds runs.jsonl, else its newest subdirectory that does."""
+    path = Path(path)
+    if (path / "runs.jsonl").exists():
+        return path
+    candidates = sorted(p.parent for p in path.glob("*/runs.jsonl"))
+    if not candidates:
+        raise FileNotFoundError(f"no runs.jsonl found in {path}")
+    return candidates[-1]  # directory names start with a UTC timestamp
+
+
+def load_run_records(run_dir: str | Path) -> list[dict]:
+    """Read the saved runs (one dict per run, as written by save_results)."""
+    lines = (Path(run_dir) / "runs.jsonl").read_text().splitlines()
+    return [json.loads(line) for line in lines if line.strip()]

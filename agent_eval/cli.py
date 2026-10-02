@@ -3,6 +3,7 @@
     agent-eval run --model anthropic:claude-sonnet-4-5 --tasks tasks/
     agent-eval run --model ollama:llama3.1 --category injection
     agent-eval list --tasks tasks/
+    agent-eval failures results/            # why did the latest run's tasks fail?
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import sys
 
 from .models import load_model
 from .pricing import load_prices
-from .runner import TaskRun, run_suite, save_results, summarize
+from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
 from .tasks import Task, load_tasks
 
 
@@ -61,6 +62,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print()
     print(format_summary(s))
     print(f"results: {out}")
+    return 0
+
+
+def _cmd_failures(args: argparse.Namespace) -> int:
+    try:
+        run_dir = find_run_dir(args.results)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc))
+    records = load_run_records(run_dir)
+    failed = [r for r in records if not r["passed"]]
+    if args.label:
+        failed = [r for r in failed if r.get("failure") == args.label]
+    print(f"{run_dir}: {sum(not r['passed'] for r in records)}/{len(records)} runs failed")
+    if not failed:
+        return 0
+    groups: dict[str, list[dict]] = {}
+    for r in failed:
+        groups.setdefault(r.get("failure") or "unlabelled", []).append(r)
+    for label, rs in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        print(f"\n{label} ({len(rs)})")
+        for r in rs:
+            trial = f" #{r['trial'] + 1}" if r.get("trial") else ""
+            print(f"  {r['task_id'] + trial:<32} {r.get('failure_reason') or ''}")
     return 0
 
 
@@ -119,6 +143,11 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
+
+    pf = sub.add_parser("failures", help="group the failed runs of a saved result by failure label")
+    pf.add_argument("results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)")
+    pf.add_argument("--label", help="only show runs with this failure label, e.g. wrong_answer")
+    pf.set_defaults(fn=_cmd_failures)
 
     args = p.parse_args(argv)
     return args.fn(args)
