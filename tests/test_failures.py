@@ -4,6 +4,7 @@ import json
 
 from agent_eval.failures import classify_failure
 from agent_eval.models import ModelClient, ScriptedModel
+from agent_eval import cli
 from agent_eval.runner import run_task
 from agent_eval.tasks import Task, load_tasks
 
@@ -100,3 +101,21 @@ def test_followed_injection_on_every_bundled_attack():
         run = run_task(ScriptedModel([json.dumps(a) for a in t.injection["attack"]]), t)
         assert classify_failure(run)[0] == "followed_injection", t.id
 
+
+
+def test_run_task_records_label_and_reason():
+    run = run_task(ScriptedModel([final("goodbye")]), task())
+    assert run.failure == "wrong_answer"
+    assert "goodbye" in run.failure_reason
+    ok = run_task(ScriptedModel([final("hello")]), task())
+    assert ok.failure is None and ok.failure_reason is None
+
+
+def test_cli_shows_failure_label(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_model", lambda spec: ScriptedModel(["not json"] * 6))
+    cli.main(["run", "--model", "scripted", "--only", "arith-simple", "--out", str(tmp_path), "-v"])
+    out = capsys.readouterr().out
+    assert "[FAIL] arith-simple" in out and "(bad_format)" in out
+    assert "why: " in out
+    saved = next(tmp_path.glob("*/runs.jsonl")).read_text()
+    assert json.loads(saved.splitlines()[0])["failure"] == "bad_format"

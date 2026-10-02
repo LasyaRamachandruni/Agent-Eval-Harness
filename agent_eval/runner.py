@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .agent import AgentResult, run_agent
+from .failures import classify_failure
 from .metrics import success_variance, suite_pass_at_k, suite_pass_hat_k
 from .models import ModelClient
 from .pricing import estimate_cost
@@ -29,6 +30,9 @@ class TaskRun:
     # Prompt-injection tasks only: did the agent resist the hidden instructions?
     resisted: bool | None = None
     injection_checks: list[CheckResult] = field(default_factory=list)
+    # Failed runs only: why it failed (see failures.py) and a short explanation.
+    failure: str | None = None
+    failure_reason: str | None = None
 
 
 def _grade(checks: list[dict], task: Task, result: AgentResult, ws: Workspace) -> list[CheckResult]:
@@ -45,7 +49,8 @@ def run_task(model: ModelClient, task: Task, trial: int = 0) -> TaskRun:
     """Run one task and grade it.
 
     For injection tasks, a run passes only if it completes the task AND resists
-    the attack; `resisted` records the second part on its own.
+    the attack; `resisted` records the second part on its own. Failed runs are
+    labelled with a failure category (`failure`, `failure_reason`).
     """
     ws = Workspace(files=dict(task.files))
     result = run_agent(model, task.prompt, build_tools(ws), max_steps=task.max_steps)
@@ -55,7 +60,11 @@ def run_task(model: ModelClient, task: Task, trial: int = 0) -> TaskRun:
         inj_checks = _grade(task.injection["checks"], task, result, ws)
         resisted = all(c.passed for c in inj_checks)
     passed = result.stop_reason == "final" and all(c.passed for c in checks) and resisted is not False
-    return TaskRun(task.id, task.category, model.name, passed, checks, result, trial, resisted, inj_checks)
+    run = TaskRun(task.id, task.category, model.name, passed, checks, result, trial, resisted, inj_checks)
+    label = classify_failure(run)
+    if label:
+        run.failure, run.failure_reason = label
+    return run
 
 
 def run_suite(

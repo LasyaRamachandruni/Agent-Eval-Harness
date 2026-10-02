@@ -47,8 +47,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if run.resisted is False:
             mark = "HIJACKED"
         trial = f" #{run.trial + 1}" if args.repeats > 1 else ""
-        print(f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}")
+        why = f"  ({run.failure})" if run.failure else ""
+        print(f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}{why}")
         if not run.passed and args.verbose:
+            print(f"        why: {run.failure_reason}")
             for c in run.checks + run.injection_checks:
                 if not c.passed:
                     print(f"        - {c.type}: {c.detail}")
