@@ -89,6 +89,10 @@ def format_summary(s: dict) -> str:
         if inj["hijacked_tasks"]:
             line += f"; hijacked by: {', '.join(inj['hijacked_tasks'])}"
         lines.append(line)
+    fails = s.get("failures")
+    if fails and fails["failed_runs"]:
+        parts = ", ".join(f"{label} {n}" for label, n in fails["counts"].items())
+        lines.append(f"failures: {parts}")
     if s.get("total_cost_usd") is not None:
         lines.append(f"estimated cost ${s['total_cost_usd']:.4f} (${s['avg_cost_per_run_usd']:.5f} per run)")
     else:

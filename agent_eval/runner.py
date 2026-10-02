@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .agent import AgentResult, run_agent
-from .failures import classify_failure
+from .failures import LABELS, classify_failure
 from .metrics import success_variance, suite_pass_at_k, suite_pass_hat_k
 from .models import ModelClient
 from .pricing import estimate_cost
@@ -126,8 +126,37 @@ def injection_summary(runs: list[TaskRun]) -> dict | None:
     }
 
 
+def failure_summary(runs: list[TaskRun]) -> dict:
+    """Count failed runs by failure label, overall and per category.
+
+    Labels are listed most common first; labels that never occurred are left out.
+    `examples` gives one task id per label so a failure is easy to look up.
+    """
+    failed = [r for r in runs if not r.passed]
+    counts: dict[str, int] = {}
+    examples: dict[str, str] = {}
+    by_cat: dict[str, dict[str, int]] = {}
+    for r in failed:
+        label = r.failure or "unlabelled"
+        counts[label] = counts.get(label, 0) + 1
+        examples.setdefault(label, r.task_id)
+        cat = by_cat.setdefault(r.category, {})
+        cat[label] = cat.get(label, 0) + 1
+    order = {label: i for i, label in enumerate(LABELS)}
+
+    def ranked(d: dict[str, int]) -> dict[str, int]:
+        return dict(sorted(d.items(), key=lambda kv: (-kv[1], order.get(kv[0], len(order)))))
+
+    return {
+        "failed_runs": len(failed),
+        "counts": ranked(counts),
+        "examples": examples,
+        "by_category": {c: ranked(d) for c, d in sorted(by_cat.items())},
+    }
+
+
 def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
-    """Aggregate runs into success, consistency, efficiency, cost and injection numbers.
+    """Aggregate runs into success, consistency, efficiency, cost, injection and failure numbers.
 
     Runs are grouped by task, so repeated trials of the same task feed pass@k,
     pass^k and per-task variance. Costs are estimates from `pricing.PRICES`
@@ -160,6 +189,9 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
         }
         if rs[0].resisted is not None:
             per_task[tid]["resisted"] = sum(r.resisted for r in rs)
+        labels = [r.failure for r in rs if r.failure]
+        if labels:
+            per_task[tid]["failures"] = {lab: labels.count(lab) for lab in dict.fromkeys(labels)}
 
     by_cat: dict[str, list[TaskRun]] = {}
     for r in runs:
@@ -186,6 +218,7 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
         "avg_cost_per_run_usd": avg_cost,
         "total_cost_usd": None if avg_cost is None else round(avg_cost * n, 6),
         "injection": injection_summary(runs),
+        "failures": failure_summary(runs),
         "by_category": {
             c: {
                 "tasks": len({r.task_id for r in rs}),

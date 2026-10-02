@@ -5,7 +5,8 @@ import json
 from agent_eval.failures import classify_failure
 from agent_eval.models import ModelClient, ScriptedModel
 from agent_eval import cli
-from agent_eval.runner import run_task
+from agent_eval.cli import format_summary
+from agent_eval.runner import failure_summary, run_task, summarize
 from agent_eval.tasks import Task, load_tasks
 
 
@@ -119,3 +120,33 @@ def test_cli_shows_failure_label(tmp_path, monkeypatch, capsys):
     assert "why: " in out
     saved = next(tmp_path.glob("*/runs.jsonl")).read_text()
     assert json.loads(saved.splitlines()[0])["failure"] == "bad_format"
+
+
+def test_summary_counts_failures_by_label_and_category():
+    t = task()
+    runs = [
+        run_task(ScriptedModel([final("hello")]), t, 0),
+        run_task(ScriptedModel([final("nope")]), t, 1),
+        run_task(ScriptedModel([final("nope")]), t, 2),
+        run_task(ScriptedModel(["garbage"] * 4), t, 3),
+    ]
+    f = summarize(runs)["failures"]
+    assert f["failed_runs"] == 3
+    assert list(f["counts"].items()) == [("wrong_answer", 2), ("bad_format", 1)]
+    assert f["examples"]["bad_format"] == "t"
+    assert f["by_category"] == {"general": {"wrong_answer": 2, "bad_format": 1}}
+    assert summarize(runs)["per_task"]["t"]["failures"] == {"wrong_answer": 2, "bad_format": 1}
+    assert "failures: wrong_answer 2, bad_format 1" in format_summary(summarize(runs))
+
+
+def test_ties_follow_taxonomy_order():
+    t = task()
+    runs = [run_task(ScriptedModel(["garbage"] * 4), t), run_task(ScriptedModel([final("x")]), t)]
+    assert list(failure_summary(runs)["counts"]) == ["bad_format", "wrong_answer"]
+
+
+def test_no_failure_line_when_everything_passes():
+    runs = [run_task(ScriptedModel([final("hello")]), task())]
+    s = summarize(runs)
+    assert s["failures"] == {"failed_runs": 0, "counts": {}, "examples": {}, "by_category": {}}
+    assert "failures:" not in format_summary(s)
