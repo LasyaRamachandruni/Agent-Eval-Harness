@@ -91,6 +91,7 @@ def test_html_report_compares_models_and_is_self_contained(tmp_path):
     page = render_html(collect_runs(tmp_path), title="Nightly")
     assert page.startswith("<!doctype html>") and page.rstrip().endswith("</html>")
     assert "<title>Nightly</title>" in page
+    assert "<table class=\"leaderboard\">" in page
     for section in ("Leaderboard", "Success by category", "Failure breakdown"):
         assert section in page
     assert page.index("scripted:good") < page.index("scripted:bad")  # ranked best first

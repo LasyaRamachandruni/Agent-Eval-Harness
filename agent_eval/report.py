@@ -136,7 +136,7 @@ table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nu
 th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 th { background: var(--head); font-weight: 600; }
 tr:last-child td { border-bottom: none; }
-th:first-child, td:first-child, td.name { text-align: left; }
+th:first-child, td:first-child, .leaderboard td:nth-child(2), .leaderboard th:nth-child(2) { text-align: left; }
 .bar { display: inline-block; width: 80px; height: 8px; margin-left: 8px; border-radius: 4px;
        background: var(--line); vertical-align: middle; overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--bar); }
@@ -164,11 +164,12 @@ def _usd(x: float | None, digits: int = 5) -> str:
     return '<span class="na">n/a</span>' if x is None else f"${x:.{digits}f}"
 
 
-def _table(headers: list[str], rows: list[list[str]]) -> str:
+def _table(headers: list[str], rows: list[list[str]], cls: str = "") -> str:
     """An HTML table; cells are already-escaped HTML."""
     head = "".join(f"<th>{h}</th>" for h in headers)
     body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>" for row in rows)
-    return f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+    attr = f' class="{cls}"' if cls else ""
+    return f'<div class="scroll"><table{attr}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def _leaderboard_section(rows: list[dict]) -> str:
@@ -189,7 +190,7 @@ def _leaderboard_section(rows: list[dict]) -> str:
         ]
         for r in rows
     ]
-    return "<h2>Leaderboard</h2>" + _table(headers, body)
+    return "<h2>Leaderboard</h2>" + _table(headers, body, cls="leaderboard")
 
 
 def _category_section(runs: list[SavedRun]) -> str:
