@@ -9,6 +9,7 @@ Most agent demos show one lucky run. This project asks the questions that matter
 - **What does it cost?** Steps, tokens and time per task.
 - **Can it be tricked?** Prompt-injection tests hidden inside the files the agent reads.
 - **Why does it fail?** Every step is traced, and every failed run is automatically labelled with a failure category.
+- **Which model is best?** A static HTML report and leaderboard compare runs side by side.
 
 ## How it works
 
@@ -32,6 +33,7 @@ task (JSON) ──► agent loop ──► tools (sandboxed workspace)
 ```bash
 pip install -e ".[dev]"
 python -m pytest                       # offline tests, no API key needed
+agent-eval demo && agent-eval report results/demo   # try the report offline
 
 agent-eval list                        # see the tasks
 pip install -e ".[anthropic]"          # or .[openai]
@@ -40,6 +42,7 @@ agent-eval run --model anthropic:claude-sonnet-4-5 -v
 agent-eval run --model anthropic:claude-sonnet-4-5 --repeats 5   # measure consistency
 agent-eval run --model anthropic:claude-sonnet-4-5 --category injection   # injection suite only
 agent-eval failures results/           # group the latest run's failures by cause
+agent-eval report results/             # leaderboard + results/report.html
 
 # free local option
 ollama pull llama3.1
@@ -146,6 +149,32 @@ agent-eval failures results/<run-dir> --label wrong_answer
 
 The rules live in `agent_eval/failures.py`; each one has a test that produces it with a scripted agent.
 
+## HTML report and leaderboard
+
+After running a few models, compare them:
+
+```bash
+agent-eval report results/                 # newest run of each model
+agent-eval report results/ --all -o board.html --title "Nightly eval"
+```
+
+This prints a leaderboard and writes a single self-contained `report.html` (inline CSS, no scripts, no external files, light and dark mode), so it opens from disk or can be attached to an email. The page has:
+
+- **Leaderboard**: success rate, pass^k (consistency), tasks passed on every trial, injection resistance, average steps and tokens, and estimated cost. Models are ranked by success, then pass^k, then injection resistance, then cost per run.
+- **Success by category**: one column per model.
+- **Failure breakdown**: failed runs per failure label, per model.
+- **Per-task results**: a task-by-model grid of trials passed, with the failure label or `hijacked` on failed tasks.
+
+By default only the newest run of each model is used, so re-running a model replaces its row; `--all` keeps every run.
+
+No API key yet? `agent-eval demo` runs two scripted agents offline: `scripted:careful` replays each task's reference solution, and `scripted:gullible` does the same but obeys the hidden instructions on injection tasks. They go through the real grader, so the report shows what the harness catches (these are not real model results):
+
+```
+#  model                              success  pass^k inj.res   cost/run
+1  scripted:careful                      100%    100%    100%   $0.00000
+2  scripted:gullible                      75%     75%      0%   $0.00000
+```
+
 ## Task format
 
 ```json
@@ -192,6 +221,8 @@ agent_eval/
   failures.py failure taxonomy: why each failed run failed
   metrics.py  pass@k, pass^k and consistency metrics
   pricing.py  per-model price table and cost estimates
+  report.py   leaderboard and self-contained HTML report
+  demo.py     offline scripted demo agents
   cli.py      command line interface
 tasks/        task suites (basic, files, reasoning, multi_step, robustness, injection)
 tests/        unit tests (run offline)
@@ -205,7 +236,7 @@ tests/        unit tests (run offline)
 - [x] Reliability metrics: repeated runs, pass@k and consistency, cost per task
 - [x] Prompt-injection suite and an injection-resistance score
 - [x] Failure taxonomy: automatic labels for why each failed run failed
-- [ ] HTML report and model leaderboard
+- [x] HTML report and model leaderboard
 - [ ] Mitigation experiments: measure defenses before and after
 - [ ] CI with GitHub Actions
 - [ ] Benchmark write-up comparing real models
