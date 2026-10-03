@@ -5,6 +5,7 @@
     agent-eval list --tasks tasks/
     agent-eval failures results/            # why did the latest run's tasks fail?
     agent-eval report results/              # leaderboard + results/report.html
+    agent-eval demo                         # offline scripted agents, no API key
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .demo import run_demo
 from .models import load_model
 from .pricing import load_prices
 from .report import collect_runs, leaderboard, render_html
@@ -104,6 +106,14 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo(args: argparse.Namespace) -> int:
+    tasks = select_tasks(args)
+    for path in run_demo(tasks, args.out):
+        print(f"saved {path}")
+    print(f"\nnext: agent-eval report {args.out}")
+    return 0
+
+
 def format_leaderboard(rows: list[dict]) -> str:
     """Plain-text leaderboard for the terminal."""
     lines = [f"{'#':<3}{'model':<34}{'success':>8}{'pass^k':>8}{'inj.res':>8}{'cost/run':>11}"]
@@ -183,6 +193,12 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--all", action="store_true", help="include every run, not just the newest per model")
     pp.add_argument("--title", default="Agent Eval Report")
     pp.set_defaults(fn=_cmd_report)
+
+    pd = sub.add_parser("demo", help="run two scripted demo agents offline (no API key) to try the report")
+    pd.add_argument("--tasks", default="tasks")
+    pd.add_argument("--category", help="comma-separated categories to run")
+    pd.add_argument("--out", default="results/demo")
+    pd.set_defaults(fn=_cmd_demo)
 
     args = p.parse_args(argv)
     return args.fn(args)
