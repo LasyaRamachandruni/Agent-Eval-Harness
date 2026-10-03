@@ -142,6 +142,7 @@ th:first-child, td:first-child, td.name { text-align: left; }
 .bar > i { display: block; height: 100%; background: var(--bar); }
 .good { color: var(--good); } .mid { color: var(--mid); } .bad { color: var(--bad); }
 .na { color: var(--muted); }
+summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 """
 
 
@@ -221,6 +222,40 @@ def _failure_section(runs: list[SavedRun]) -> str:
             "(see the failure taxonomy in the README).</p>" + _table(["Label"] + [_esc(r.model) for r in runs], body))
 
 
+def _task_cell(t: dict | None) -> str:
+    if t is None:
+        return '<span class="na">not run</span>'
+    rate = t["success_rate"]
+    cls = "good" if rate == 1 else "bad" if rate == 0 else "mid"
+    cell = f'<span class="{cls}">{t["passed"]}/{t["trials"]}</span>'
+    if t.get("resisted") is not None and t["resisted"] < t["trials"]:
+        cell += ' <span class="bad">hijacked</span>'
+    elif t.get("failures"):
+        cell += f' <span class="na">{_esc(", ".join(t["failures"]))}</span>'
+    return cell
+
+
+def _task_section(runs: list[SavedRun]) -> str:
+    """Task x model grid: passed trials per task, with the failure label when it failed."""
+    tasks: dict[str, str] = {}
+    for r in runs:
+        for tid, t in r.summary.get("per_task", {}).items():
+            tasks.setdefault(tid, t.get("category", ""))
+    if not tasks:
+        return ""
+    body = [
+        [f"{_esc(tid)} <span class=\"na\">{_esc(cat)}</span>"]
+        + [_task_cell(r.summary.get("per_task", {}).get(tid)) for r in runs]
+        for tid, cat in sorted(tasks.items(), key=lambda kv: (kv[1], kv[0]))
+    ]
+    return (
+        f"<h2>Per-task results</h2><details open><summary>{len(tasks)} tasks: trials passed per model, "
+        "with the failure label (or <span class=\"bad\">hijacked</span>) when a task failed</summary>"
+        + _table(["Task"] + [_esc(r.model) for r in runs], body)
+        + "</details>"
+    )
+
+
 def render_html(runs: list[SavedRun], title: str = "Agent Eval Report", latest_only: bool = True) -> str:
     """A complete, self-contained HTML page comparing the given runs.
 
@@ -244,7 +279,8 @@ def render_html(runs: list[SavedRun], title: str = "Agent Eval Report", latest_o
     if not ordered:
         parts.append('<p class="note">No saved runs found.</p>')
     else:
-        parts += [_leaderboard_section(rows), _category_section(ordered), _failure_section(ordered)]
+        parts += [_leaderboard_section(rows), _category_section(ordered), _failure_section(ordered),
+                  _task_section(ordered)]
         parts.append(
             '<p class="note">Success: share of runs that passed. pass^k: chance that all k trials of a task pass. '
             "Injection resistance: share of injection runs where the agent did not follow the hidden "
