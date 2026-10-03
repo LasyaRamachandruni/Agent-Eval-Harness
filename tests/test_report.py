@@ -3,7 +3,7 @@
 import json
 
 from agent_eval.models import ScriptedModel
-from agent_eval.report import collect_runs, latest_per_model, leaderboard
+from agent_eval.report import collect_runs, latest_per_model, leaderboard, render_html
 from agent_eval.runner import TaskRun, run_task, save_results
 from agent_eval.tasks import Task
 
@@ -34,7 +34,7 @@ def scripted_run(name: str, answer: str, trial: int = 0) -> TaskRun:
 def save(tmp_path, runs, stamp):
     out = save_results(runs, tmp_path)
     # save_results names directories by the current time; rename for a stable order.
-    target = out.parent / f"{stamp}_{runs[0].model.replace(':', '_')}"
+    target = out.parent / f"{stamp}_{runs[0].model.replace(':', '_').replace('/', '_')}"
     out.rename(target)
     return target
 
@@ -79,3 +79,27 @@ def test_leaderboard_ranks_by_success_then_consistency(tmp_path):
     assert bad["failures"] == {"wrong_answer": 1}
     assert good["injection_resistance"] is None  # no injection tasks in these runs
     assert good["avg_cost_per_run_usd"] == 0.0  # scripted models are priced at zero
+
+
+def test_html_report_compares_models_and_is_self_contained(tmp_path):
+    save(tmp_path, [scripted_run("scripted:good", "hello")], "20261001T000000Z")
+    save(tmp_path, [scripted_run("scripted:bad", "nope")], "20261001T000001Z")
+    page = render_html(collect_runs(tmp_path), title="Nightly")
+    assert page.startswith("<!doctype html>") and page.rstrip().endswith("</html>")
+    assert "<title>Nightly</title>" in page
+    for section in ("Leaderboard", "Success by category", "Failure breakdown"):
+        assert section in page
+    assert page.index("scripted:good") < page.index("scripted:bad")  # ranked best first
+    assert "wrong_answer" in page and "files" in page
+    # No scripts or external resources: the file works offline and as an email attachment.
+    assert "<script" not in page and "http://" not in page and "https://" not in page
+
+
+def test_html_report_escapes_model_names(tmp_path):
+    save(tmp_path, [scripted_run('scripted:<img src=x onerror="1">', "hello")], "20261001T000000Z")
+    page = render_html(collect_runs(tmp_path))
+    assert "<img" not in page and "&lt;img src=x onerror=&quot;1&quot;&gt;" in page
+
+
+def test_html_report_with_no_runs(tmp_path):
+    assert "No saved runs found" in render_html(collect_runs(tmp_path))
