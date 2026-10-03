@@ -2,6 +2,10 @@
 
 import json
 
+import pytest
+
+from agent_eval import cli
+
 from agent_eval.models import ScriptedModel
 from agent_eval.report import collect_runs, latest_per_model, leaderboard, render_html
 from agent_eval.runner import TaskRun, run_task, save_results
@@ -129,3 +133,24 @@ def test_per_task_grid_shows_trials_failures_and_hijacks(tmp_path):
     assert "hijacked</span>" in grid and "wrong_answer" in grid
     rows = leaderboard(collect_runs(tmp_path))
     assert [r["injection_resistance"] for r in rows] == [1.0, 0.0]
+
+
+def test_report_command_prints_leaderboard_and_writes_html(tmp_path, capsys):
+    save(tmp_path, [scripted_run("scripted:good", "hello")], "20261001T000000Z")
+    save(tmp_path, [scripted_run("scripted:bad", "nope")], "20261001T000001Z")
+    assert cli.main(["report", str(tmp_path), "--title", "Weekly"]) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[1].split()[:3] == ["1", "scripted:good", "100%"]
+    assert lines[2].split()[:3] == ["2", "scripted:bad", "0%"]
+    page = (tmp_path / "report.html").read_text()
+    assert "<title>Weekly</title>" in page
+
+    custom = tmp_path / "custom.html"
+    cli.main(["report", str(tmp_path), "-o", str(custom), "--all"])
+    assert custom.exists()
+
+
+def test_report_command_without_runs_exits(tmp_path):
+    with pytest.raises(SystemExit):
+        cli.main(["report", str(tmp_path)])

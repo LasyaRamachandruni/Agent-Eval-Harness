@@ -4,15 +4,18 @@
     agent-eval run --model ollama:llama3.1 --category injection
     agent-eval list --tasks tasks/
     agent-eval failures results/            # why did the latest run's tasks fail?
+    agent-eval report results/              # leaderboard + results/report.html
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from .models import load_model
 from .pricing import load_prices
+from .report import collect_runs, leaderboard, render_html
 from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
 from .tasks import Task, load_tasks
 
@@ -88,6 +91,31 @@ def _cmd_failures(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    runs = collect_runs(args.results)
+    if not runs:
+        raise SystemExit(f"no saved runs (summary.json) found in {args.results}")
+    latest = not args.all
+    rows = leaderboard(runs, latest_only=latest)
+    print(format_leaderboard(rows))
+    out = Path(args.out) if args.out else Path(args.results) / "report.html"
+    out.write_text(render_html(runs, title=args.title, latest_only=latest))
+    print(f"\nreport: {out}")
+    return 0
+
+
+def format_leaderboard(rows: list[dict]) -> str:
+    """Plain-text leaderboard for the terminal."""
+    lines = [f"{'#':<3}{'model':<34}{'success':>8}{'pass^k':>8}{'inj.res':>8}{'cost/run':>11}"]
+    for r in rows:
+        inj = "-" if r["injection_resistance"] is None else f"{r['injection_resistance']:.0%}"
+        cost = "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}"
+        lines.append(
+            f"{r['rank']:<3}{r['model'][:33]:<34}{r['success_rate']:>8.0%}{r['pass_hat_k']:>8.0%}{inj:>8}{cost:>11}"
+        )
+    return "\n".join(lines)
+
+
 def format_summary(s: dict) -> str:
     """Human-readable summary lines for the end of a run."""
     k = s["repeats"]
@@ -148,6 +176,13 @@ def main(argv: list[str] | None = None) -> int:
     pf.add_argument("results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)")
     pf.add_argument("--label", help="only show runs with this failure label, e.g. wrong_answer")
     pf.set_defaults(fn=_cmd_failures)
+
+    pp = sub.add_parser("report", help="compare saved runs: print a leaderboard and write an HTML report")
+    pp.add_argument("results", nargs="?", default="results", help="a folder of run directories (or a single one)")
+    pp.add_argument("-o", "--out", help="where to write the HTML (default: <results>/report.html)")
+    pp.add_argument("--all", action="store_true", help="include every run, not just the newest per model")
+    pp.add_argument("--title", default="Agent Eval Report")
+    pp.set_defaults(fn=_cmd_report)
 
     args = p.parse_args(argv)
     return args.fn(args)
