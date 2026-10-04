@@ -2,6 +2,7 @@
 
     agent-eval run --model anthropic:claude-sonnet-4-5 --tasks tasks/
     agent-eval run --model ollama:llama3.1 --category injection
+    agent-eval run --model ollama:llama3.1 --category injection --defense all
     agent-eval list --tasks tasks/
     agent-eval failures results/            # why did the latest run's tasks fail?
     agent-eval report results/              # leaderboard + results/report.html
@@ -14,6 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .defenses import resolve_defenses
 from .demo import run_demo
 from .models import load_model
 from .pricing import load_prices
@@ -46,7 +48,13 @@ def _cmd_list(args: argparse.Namespace) -> int:
 def _cmd_run(args: argparse.Namespace) -> int:
     tasks = select_tasks(args)
     prices = load_prices(args.prices) if args.prices else None
+    try:
+        defenses = resolve_defenses(args.defense)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
     model = load_model(args.model)
+    if defenses:
+        print(f"defenses: {', '.join(d.name for d in defenses)}")
 
     def show(run: TaskRun) -> None:
         mark = "PASS" if run.passed else "FAIL"
@@ -61,7 +69,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 if not c.passed:
                     print(f"        - {c.type}: {c.detail}")
 
-    runs = run_suite(model, tasks, repeats=args.repeats, on_run=show)
+    runs = run_suite(model, tasks, repeats=args.repeats, on_run=show, defenses=defenses)
     s = summarize(runs, prices)
     out = save_results(runs, args.out, prices)
     print()
@@ -178,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--only", help="comma-separated task ids to run")
     pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
     pr.add_argument("--prices", help="JSON file of per-model prices, e.g. {\"openai:gpt-4o\": [2.5, 10]}")
+    pr.add_argument("--defense", help="comma-separated injection defenses: hardened_prompt, tag_untrusted, all")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .agent import AgentResult, run_agent
+from .defenses import Defense
 from .failures import LABELS, classify_failure
 from .metrics import success_variance, suite_pass_at_k, suite_pass_hat_k
 from .models import ModelClient
@@ -33,6 +34,13 @@ class TaskRun:
     # Failed runs only: why it failed (see failures.py) and a short explanation.
     failure: str | None = None
     failure_reason: str | None = None
+    # Names of the injection defenses the agent ran with (empty = baseline).
+    defenses: list[str] = field(default_factory=list)
+
+
+def run_label(model: str, defenses: list[str] | None) -> str:
+    """How a run is named in summaries and reports: the model plus any defenses."""
+    return f"{model} +{'+'.join(defenses)}" if defenses else model
 
 
 def _grade(checks: list[dict], task: Task, result: AgentResult, ws: Workspace) -> list[CheckResult]:
@@ -45,22 +53,25 @@ def _grade(checks: list[dict], task: Task, result: AgentResult, ws: Workspace) -
     return graded
 
 
-def run_task(model: ModelClient, task: Task, trial: int = 0) -> TaskRun:
+def run_task(model: ModelClient, task: Task, trial: int = 0, defenses: list[Defense] | None = None) -> TaskRun:
     """Run one task and grade it.
 
     For injection tasks, a run passes only if it completes the task AND resists
     the attack; `resisted` records the second part on its own. Failed runs are
-    labelled with a failure category (`failure`, `failure_reason`).
+    labelled with a failure category (`failure`, `failure_reason`). `defenses`
+    are passed to the agent loop (see defenses.py).
     """
+    defenses = defenses or []
     ws = Workspace(files=dict(task.files))
-    result = run_agent(model, task.prompt, build_tools(ws), max_steps=task.max_steps)
+    result = run_agent(model, task.prompt, build_tools(ws), max_steps=task.max_steps, defenses=defenses)
     checks = _grade(task.checks, task, result, ws)
     resisted, inj_checks = None, []
     if task.is_injection:
         inj_checks = _grade(task.injection["checks"], task, result, ws)
         resisted = all(c.passed for c in inj_checks)
     passed = result.stop_reason == "final" and all(c.passed for c in checks) and resisted is not False
-    run = TaskRun(task.id, task.category, model.name, passed, checks, result, trial, resisted, inj_checks)
+    run = TaskRun(task.id, task.category, model.name, passed, checks, result, trial, resisted, inj_checks,
+                  defenses=[d.name for d in defenses])
     label = classify_failure(run)
     if label:
         run.failure, run.failure_reason = label
@@ -72,6 +83,7 @@ def run_suite(
     tasks: list[Task],
     repeats: int = 1,
     on_run: Callable[[TaskRun], None] | None = None,
+    defenses: list[Defense] | None = None,
 ) -> list[TaskRun]:
     """Run every task `repeats` times. `on_run` is called after each run (e.g. to print progress)."""
     if repeats < 1:
@@ -79,7 +91,7 @@ def run_suite(
     runs = []
     for task in tasks:
         for trial in range(repeats):
-            run = run_task(model, task, trial)
+            run = run_task(model, task, trial, defenses)
             if on_run:
                 on_run(run)
             runs.append(run)
@@ -199,6 +211,8 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
 
     return {
         "model": runs[0].model,
+        "defenses": list(runs[0].defenses),
+        "label": run_label(runs[0].model, runs[0].defenses),
         "tasks": len(by_task),
         "repeats": repeats,
         "runs": n,
@@ -235,7 +249,8 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
 def save_results(runs: list[TaskRun], out_dir: str | Path, prices: dict | None = None) -> Path:
     """Write one JSONL line per task (with full trace) plus a summary.json."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    model_slug = runs[0].model.replace(":", "_").replace("/", "_") if runs else "none"
+    label = run_label(runs[0].model, runs[0].defenses) if runs else "none"
+    model_slug = label.replace(":", "_").replace("/", "_").replace(" ", "")
     run_dir = Path(out_dir) / f"{stamp}_{model_slug}"
     run_dir.mkdir(parents=True, exist_ok=True)
     with open(run_dir / "runs.jsonl", "w") as f:

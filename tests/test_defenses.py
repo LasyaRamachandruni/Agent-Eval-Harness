@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from agent_eval import cli
 from agent_eval.agent import run_agent
 from agent_eval.defenses import (
     DEFENSES,
@@ -13,8 +14,12 @@ from agent_eval.defenses import (
     resolve_defenses,
     tag_observation,
 )
-from agent_eval.models import ModelClient, ModelReply
+from agent_eval.models import ModelClient, ModelReply, ScriptedModel
+from agent_eval.runner import run_label, run_suite, save_results, summarize
+from agent_eval.tasks import load_tasks
 from agent_eval.tools import Workspace, build_tools
+
+CANARY = load_tasks("tasks/injection/canary-word.json")
 
 
 class RecordingModel(ModelClient):
@@ -92,3 +97,45 @@ def test_tool_errors_are_not_tagged():
     model = RecordingModel([call("read_file", path="missing.txt"), final("x")])
     run_agent(model, "task", build_tools(Workspace()), defenses=resolve_defenses("all"))
     assert model.seen[1][-1].startswith("Error:")
+
+
+# --- runner and CLI ---------------------------------------------------------
+
+def test_runs_record_their_defenses():
+    task = CANARY[0]
+    model = ScriptedModel([json.dumps(a) for a in task.solution])
+    runs = run_suite(model, [task], defenses=resolve_defenses("hardened_prompt"))
+    assert runs[0].defenses == ["hardened_prompt"]
+    s = summarize(runs)
+    assert s["defenses"] == ["hardened_prompt"]
+    assert s["label"] == "scripted +hardened_prompt"
+
+
+def test_baseline_label_is_the_model_name(tmp_path):
+    task = CANARY[0]
+    runs = run_suite(ScriptedModel([json.dumps(a) for a in task.solution]), [task])
+    assert summarize(runs)["label"] == "scripted" and summarize(runs)["defenses"] == []
+    assert save_results(runs, tmp_path).name.endswith("_scripted")
+    assert run_label("openai:gpt-4o", ["hardened_prompt", "tag_untrusted"]) == "openai:gpt-4o +hardened_prompt+tag_untrusted"
+
+
+def test_defended_results_get_their_own_directory(tmp_path):
+    task = CANARY[0]
+    runs = run_suite(ScriptedModel([json.dumps(a) for a in task.solution]), [task],
+                     defenses=resolve_defenses("all"))
+    assert save_results(runs, tmp_path).name.endswith("_scripted+hardened_prompt+tag_untrusted")
+
+
+def test_cli_run_with_defense(tmp_path, monkeypatch, capsys):
+    task = CANARY[0]
+    monkeypatch.setattr(cli, "load_model", lambda spec: ScriptedModel([json.dumps(a) for a in task.solution]))
+    assert cli.main(["run", "--model", "scripted", "--tasks", "tasks/injection/canary-word.json",
+                     "--defense", "tag_untrusted", "--out", str(tmp_path)]) == 0
+    assert "defenses: tag_untrusted" in capsys.readouterr().out
+    summary = json.loads(next(tmp_path.glob("*/summary.json")).read_text())
+    assert summary["defenses"] == ["tag_untrusted"]
+
+
+def test_cli_rejects_unknown_defense(tmp_path):
+    with pytest.raises(SystemExit, match="unknown defense"):
+        cli.main(["run", "--model", "scripted", "--defense", "nope", "--out", str(tmp_path)])
