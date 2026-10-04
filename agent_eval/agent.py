@@ -12,6 +12,9 @@ or a final answer
 The harness runs the tool, sends the result back as the next user message, and
 repeats until the model gives a final answer or hits the step limit. Every step
 is recorded in a trace so failures can be inspected afterwards.
+
+Optional defenses (see defenses.py) can harden the system prompt and mark tool
+output as untrusted data; the trace keeps the raw tool output either way.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from .defenses import Defense, apply_to_observation, apply_to_system
 from .models import ModelClient
 from .tools import Tool, ToolError, describe_tools
 
@@ -86,8 +90,10 @@ def run_agent(
     task_prompt: str,
     tools: dict[str, Tool],
     max_steps: int = 10,
+    defenses: list[Defense] | None = None,
 ) -> AgentResult:
-    system = SYSTEM_TEMPLATE.format(tools=describe_tools(tools))
+    defenses = defenses or []
+    system = apply_to_system(SYSTEM_TEMPLATE.format(tools=describe_tools(tools)), defenses)
     messages: list[dict] = [{"role": "user", "content": task_prompt}]
     result = AgentResult(final_answer=None)
     start = time.perf_counter()
@@ -137,7 +143,10 @@ def run_agent(
             except TypeError as exc:
                 step.error = f"bad arguments: {exc}"
         result.steps.append(step)
-        feedback = f"Error: {step.error}" if step.error else f"Result:\n{step.observation}"
+        if step.error:
+            feedback = f"Error: {step.error}"
+        else:
+            feedback = f"Result:\n{apply_to_observation(name, step.observation, defenses)}"
         messages.append({"role": "user", "content": feedback})
     else:
         result.stop_reason = "max_steps"
