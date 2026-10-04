@@ -1,5 +1,7 @@
 # Agent Eval Harness
 
+[![tests](https://github.com/LasyaRamachandruni/Agent-Eval-Harness/actions/workflows/tests.yml/badge.svg)](https://github.com/LasyaRamachandruni/Agent-Eval-Harness/actions/workflows/tests.yml)
+
 A small, readable harness for measuring how reliably LLM agents complete tool-using tasks — and how easily they can be pushed off course.
 
 Most agent demos show one lucky run. This project asks the questions that matter before you ship an agent:
@@ -283,5 +285,5 @@ tests/        unit tests (run offline)
 - [x] Failure taxonomy: automatic labels for why each failed run failed
 - [x] HTML report and model leaderboard
 - [x] Mitigation experiments: measure defenses before and after
-- [ ] CI with GitHub Actions
+- [x] CI with GitHub Actions
 - [ ] Benchmark write-up comparing real models
