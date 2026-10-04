@@ -6,6 +6,7 @@
     agent-eval list --tasks tasks/
     agent-eval failures results/            # why did the latest run's tasks fail?
     agent-eval report results/              # leaderboard + results/report.html
+    agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
     agent-eval demo                         # offline scripted agents, no API key
 """
 
@@ -15,6 +16,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .compare import compare_runs, find_saved_run, format_comparison
 from .defenses import resolve_defenses
 from .demo import run_demo
 from .models import load_model
@@ -114,6 +116,16 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compare(args: argparse.Namespace) -> int:
+    try:
+        before = find_saved_run(args.before, args.results)
+        after = find_saved_run(args.after, args.results)
+    except LookupError as exc:
+        raise SystemExit(str(exc))
+    print(format_comparison(compare_runs(before.summary, after.summary)))
+    return 0
+
+
 def _cmd_demo(args: argparse.Namespace) -> int:
     tasks = select_tasks(args)
     for path in run_demo(tasks, args.out):
@@ -202,6 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--all", action="store_true", help="include every run, not just the newest per model")
     pp.add_argument("--title", default="Agent Eval Report")
     pp.set_defaults(fn=_cmd_report)
+
+    pc = sub.add_parser("compare", help="compare two saved runs, e.g. before and after a defense")
+    pc.add_argument("before", help="a run directory, or a run label such as openai:gpt-4o")
+    pc.add_argument("after", help="a run directory, or a run label such as 'openai:gpt-4o +hardened_prompt'")
+    pc.add_argument("--results", default="results", help="where to look up run labels (default: results)")
+    pc.set_defaults(fn=_cmd_compare)
 
     pd = sub.add_parser("demo", help="run two scripted demo agents offline (no API key) to try the report")
     pd.add_argument("--tasks", default="tasks")
