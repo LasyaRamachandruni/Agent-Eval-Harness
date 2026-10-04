@@ -143,12 +143,13 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
 def format_leaderboard(rows: list[dict]) -> str:
     """Plain-text leaderboard for the terminal."""
-    lines = [f"{'#':<3}{'model':<34}{'success':>8}{'pass^k':>8}{'inj.res':>8}{'cost/run':>11}"]
+    width = max([34] + [len(r["model"]) + 2 for r in rows])  # long labels like "model +hardened_prompt"
+    lines = [f"{'#':<3}{'model':<{width}}{'success':>8}{'pass^k':>8}{'inj.res':>8}{'cost/run':>11}"]
     for r in rows:
         inj = "-" if r["injection_resistance"] is None else f"{r['injection_resistance']:.0%}"
         cost = "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}"
         lines.append(
-            f"{r['rank']:<3}{r['model'][:33]:<34}{r['success_rate']:>8.0%}{r['pass_hat_k']:>8.0%}{inj:>8}{cost:>11}"
+            f"{r['rank']:<3}{r['model']:<{width}}{r['success_rate']:>8.0%}{r['pass_hat_k']:>8.0%}{inj:>8}{cost:>11}"
         )
     return "\n".join(lines)
 

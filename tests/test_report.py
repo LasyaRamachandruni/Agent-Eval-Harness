@@ -171,3 +171,12 @@ def test_defended_run_is_a_separate_leaderboard_entry(tmp_path):
     assert {r["base_model"] for r in rows} == {"m"}
     assert [r["defenses"] for r in rows if r["model"] != "m"] == [["hardened_prompt"]]
     assert "m +hardened_prompt" in render_html(runs)
+
+
+def test_terminal_leaderboard_keeps_long_labels_whole():
+    rows = [{"rank": 1, "model": "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted",
+             "success_rate": 1.0, "pass_hat_k": 1.0, "injection_resistance": None, "avg_cost_per_run_usd": None}]
+    text = cli.format_leaderboard(rows)
+    assert "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted" in text
+    header, row = text.splitlines()
+    assert header.index("success") + len("success") == row.index("100%") + len("100%")
