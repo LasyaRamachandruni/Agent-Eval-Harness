@@ -155,3 +155,19 @@ def test_report_command_prints_leaderboard_and_writes_html(tmp_path, capsys):
 def test_report_command_without_runs_exits(tmp_path):
     with pytest.raises(SystemExit):
         cli.main(["report", str(tmp_path)])
+
+
+def test_defended_run_is_a_separate_leaderboard_entry(tmp_path):
+    from agent_eval.defenses import resolve_defenses
+
+    base = run_task(ScriptedModel([call("read_file", path="a.txt"), final("hello")], name="m"), TASK)
+    defended = run_task(ScriptedModel([call("read_file", path="a.txt"), final("hello")], name="m"), TASK,
+                        defenses=resolve_defenses("hardened_prompt"))
+    save(tmp_path, [base], "20261001T000000Z")
+    save(tmp_path, [defended], "20261002T000000Z")
+    runs = collect_runs(tmp_path)
+    assert sorted(r.model for r in latest_per_model(runs)) == ["m", "m +hardened_prompt"]
+    rows = leaderboard(runs)
+    assert {r["base_model"] for r in rows} == {"m"}
+    assert [r["defenses"] for r in rows if r["model"] != "m"] == [["hardened_prompt"]]
+    assert "m +hardened_prompt" in render_html(runs)

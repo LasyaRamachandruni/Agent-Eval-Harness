@@ -8,7 +8,9 @@ reads a folder of those directories and lines the runs up side by side:
     page = render_html(runs)          # self-contained HTML comparing them
 
 By default only the newest run of each model is kept, so re-running a model
-replaces its old row instead of crowding the board.
+replaces its old row instead of crowding the board. A run made with injection
+defenses counts as its own entry ("openai:gpt-4o +hardened_prompt"), so a
+baseline and a defended run of the same model sit side by side.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .failures import LABELS
+from .runner import run_label
 
 
 @dataclass
@@ -31,8 +34,17 @@ class SavedRun:
     summary: dict
 
     @property
-    def model(self) -> str:
+    def base_model(self) -> str:
         return self.summary.get("model", "unknown")
+
+    @property
+    def defenses(self) -> list[str]:
+        return list(self.summary.get("defenses") or [])
+
+    @property
+    def model(self) -> str:
+        """Display name: the model plus any defenses it ran with."""
+        return run_label(self.base_model, self.defenses)
 
 
 def collect_runs(path: str | Path) -> list[SavedRun]:
@@ -70,6 +82,8 @@ def leaderboard_row(run: SavedRun) -> dict:
     fails = s.get("failures") or {}
     return {
         "model": run.model,
+        "base_model": run.base_model,
+        "defenses": run.defenses,
         "run": run.name,
         "tasks": s["tasks"],
         "runs": s["runs"],
