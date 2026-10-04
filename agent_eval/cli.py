@@ -128,9 +128,16 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 
 def _cmd_demo(args: argparse.Namespace) -> int:
     tasks = select_tasks(args)
-    for path in run_demo(tasks, args.out):
+    try:
+        defenses = resolve_defenses(args.defense)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    for path in run_demo(tasks, args.out, defenses):
         print(f"saved {path}")
     print(f"\nnext: agent-eval report {args.out}")
+    if defenses:
+        after = "scripted:gullible +" + "+".join(d.name for d in defenses)
+        print(f'      agent-eval compare scripted:gullible "{after}" --results {args.out}')
     return 0
 
 
@@ -224,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     pd = sub.add_parser("demo", help="run two scripted demo agents offline (no API key) to try the report")
     pd.add_argument("--tasks", default="tasks")
     pd.add_argument("--category", help="comma-separated categories to run")
+    pd.add_argument("--defense", help="run the demo agents with these defenses (try: all)")
     pd.add_argument("--out", default="results/demo")
     pd.set_defaults(fn=_cmd_demo)
 
