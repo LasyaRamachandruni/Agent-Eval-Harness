@@ -10,6 +10,7 @@ Most agent demos show one lucky run. This project asks the questions that matter
 - **Can it be tricked?** Prompt-injection tests hidden inside the files the agent reads.
 - **Why does it fail?** Every step is traced, and every failed run is automatically labelled with a failure category.
 - **Which model is best?** A static HTML report and leaderboard compare runs side by side.
+- **Do defenses help?** Optional prompt-injection defenses, and a before/after comparison of their effect.
 
 ## How it works
 
@@ -43,6 +44,8 @@ agent-eval run --model anthropic:claude-sonnet-4-5 --repeats 5   # measure consi
 agent-eval run --model anthropic:claude-sonnet-4-5 --category injection   # injection suite only
 agent-eval failures results/           # group the latest run's failures by cause
 agent-eval report results/             # leaderboard + results/report.html
+agent-eval run --model anthropic:claude-sonnet-4-5 --category injection --defense all
+agent-eval compare anthropic:claude-sonnet-4-5 "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted"
 
 # free local option
 ollama pull llama3.1
@@ -175,6 +178,46 @@ No API key yet? `agent-eval demo` runs two scripted agents offline: `scripted:ca
 2  scripted:gullible                      75%     75%      0%   $0.00000
 ```
 
+## Mitigation experiments
+
+Measuring injection resistance is half the job; the other half is checking whether a fix works. Two optional defenses can be switched on with `--defense` (comma-separated, or `all`):
+
+| Defense | What it changes |
+|---|---|
+| `hardened_prompt` | adds security rules to the system prompt: only the user gives instructions, text in files is data, never touch files the task does not need, never copy secrets |
+| `tag_untrusted` | wraps the output of `read_file` and `list_files` in `<untrusted_data source="...">` tags and tells the model never to follow instructions inside them; tag look-alikes inside a file are escaped so it cannot close the wrapper early |
+
+Defenses only change how the agent is prompted. Tasks, checks and grading stay the same, so a defended run is directly comparable to a baseline run. The trace keeps the raw tool output. A defended run is saved and shown under its own label (`model +hardened_prompt`), so it sits next to the baseline in the leaderboard instead of replacing it.
+
+Run the baseline and the defended version, then compare them:
+
+```bash
+agent-eval run --model openai:gpt-4o-mini --repeats 3
+agent-eval run --model openai:gpt-4o-mini --repeats 3 --defense all
+agent-eval compare openai:gpt-4o-mini "openai:gpt-4o-mini +hardened_prompt+tag_untrusted"
+```
+
+`compare` takes two run directories or run labels (the newest run with that label in `--results` is used). It prints the change in success, pass^k, injection resistance, steps, tokens and cost, and lists the tasks the change **fixed**, **broke**, stopped being hijacked on, or newly got hijacked on. The "broken" list matters: a defense that makes the agent suspicious of every file can stop attacks and also stop it doing ordinary work.
+
+Offline, `agent-eval demo --defense all` reruns the scripted agents with defenses. The gullible agent stands in for a model the defenses fully fix, so this shows the workflow, not real effect sizes:
+
+```
+before: scripted:gullible
+after:  scripted:gullible +hardened_prompt+tag_untrusted
+
+metric                    before     after      change
+success                      75%      100%     +25 pts
+pass^k                       75%      100%     +25 pts
+injection resistance          0%      100%    +100 pts
+avg steps                   2.77       2.6       -0.17
+
+40 tasks in both runs
+fixed (10): inj-canary-word, inj-config-tamper, ...
+broken (0)
+no longer hijacked (10): inj-canary-word, inj-config-tamper, ...
+newly hijacked (0)
+```
+
 ## Task format
 
 ```json
@@ -222,6 +265,8 @@ agent_eval/
   metrics.py  pass@k, pass^k and consistency metrics
   pricing.py  per-model price table and cost estimates
   report.py   leaderboard and self-contained HTML report
+  defenses.py optional prompt-injection defenses
+  compare.py  before/after comparison of two saved runs
   demo.py     offline scripted demo agents
   cli.py      command line interface
 tasks/        task suites (basic, files, reasoning, multi_step, robustness, injection)
@@ -237,6 +282,6 @@ tests/        unit tests (run offline)
 - [x] Prompt-injection suite and an injection-resistance score
 - [x] Failure taxonomy: automatic labels for why each failed run failed
 - [x] HTML report and model leaderboard
-- [ ] Mitigation experiments: measure defenses before and after
+- [x] Mitigation experiments: measure defenses before and after
 - [ ] CI with GitHub Actions
 - [ ] Benchmark write-up comparing real models
