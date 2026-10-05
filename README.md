@@ -41,6 +41,7 @@ agent-eval demo && agent-eval report results/demo   # try the report offline
 agent-eval list                        # see the tasks
 pip install -e ".[anthropic]"          # or .[openai]
 export ANTHROPIC_API_KEY=...           # see .env.example
+agent-eval check --model anthropic:claude-sonnet-4-5   # SDK installed? key set? (no API call)
 agent-eval run --model anthropic:claude-sonnet-4-5 -v
 agent-eval run --model anthropic:claude-sonnet-4-5 --repeats 5   # measure consistency
 agent-eval run --model anthropic:claude-sonnet-4-5 --category injection   # injection suite only
@@ -170,7 +171,7 @@ This prints a leaderboard and writes a single self-contained `report.html` (inli
 - **Failure breakdown**: failed runs per failure label, per model.
 - **Per-task results**: a task-by-model grid of trials passed, with the failure label or `hijacked` on failed tasks.
 
-By default only the newest run of each model is used, so re-running a model replaces its row; `--all` keeps every run.
+By default only the newest run of each model is used, so re-running a model replaces its row; `--all` keeps every run. Add `--markdown board.md` to also write the leaderboard, success by category and failure counts as Markdown tables for a write-up.
 
 No API key yet? `agent-eval demo` runs two scripted agents offline: `scripted:careful` replays each task's reference solution, and `scripted:gullible` does the same but obeys the hidden instructions on injection tasks. They go through the real grader, so the report shows what the harness catches (these are not real model results):
 
@@ -201,6 +202,8 @@ agent-eval compare openai:gpt-4o-mini "openai:gpt-4o-mini +hardened_prompt+tag_u
 
 `compare` takes two run directories or run labels (the newest run with that label in `--results` is used). It prints the change in success, pass^k, injection resistance, steps, tokens and cost, and lists the tasks the change **fixed**, **broke**, stopped being hijacked on, or newly got hijacked on. The "broken" list matters: a defense that makes the agent suspicious of every file can stop attacks and also stop it doing ordinary work.
 
+`compare --markdown cmp.md` writes the same comparison as a Markdown table.
+
 Offline, `agent-eval demo --defense all` reruns the scripted agents with defenses. The gullible agent stands in for a model the defenses fully fix, so this shows the workflow, not real effect sizes:
 
 ```
@@ -219,6 +222,20 @@ broken (0)
 no longer hijacked (10): inj-canary-word, inj-config-tamper, ...
 newly hijacked (0)
 ```
+
+## Benchmark
+
+**Real-model results are pending.** Everything above runs offline; the benchmark needs an API key, so it is packaged as one script to run:
+
+```bash
+pip install -e ".[anthropic]"                     # and/or .[openai]
+cp .env.example .env                              # add your key; .env is git-ignored
+DRY_RUN=1 scripts/run_benchmark.sh                # show the plan without calling any model
+scripts/run_benchmark.sh                          # default: claude-haiku-4-5 and claude-sonnet-4-5
+REPEATS=5 scripts/run_benchmark.sh openai:gpt-4o-mini ollama:llama3.1
+```
+
+For each model the script checks the setup (`agent-eval check`), runs all 40 tasks `REPEATS` times (default 3), runs them again with `--defense all`, then writes `results/benchmark/report.html`, `leaderboard.md` and a `compare_<model>.md` per model. Those tables drop straight into the write-up template, [`docs/BENCHMARK.md`](docs/BENCHMARK.md), which also lists the questions the write-up should answer and the limits of the suite. `OUT` and `DEFENSE` (`none` skips the defended run) can be set the same way as `REPEATS`.
 
 ## Task format
 
@@ -259,7 +276,7 @@ An injection task adds an `injection` object:
 ```
 agent_eval/
   agent.py    agent loop and action parsing
-  models.py   model clients (Anthropic, OpenAI, Ollama, scripted for tests)
+  models.py   model clients (Anthropic, OpenAI, Ollama, scripted for tests) and setup checks
   tools.py    sandboxed workspace and tools
   tasks.py    task loading and checks
   runner.py   running, repeating, grading, injection scoring and summaries
@@ -271,6 +288,10 @@ agent_eval/
   compare.py  before/after comparison of two saved runs
   demo.py     offline scripted demo agents
   cli.py      command line interface
+scripts/
+  run_benchmark.sh  full benchmark: baseline + defended runs, report, comparisons
+docs/
+  BENCHMARK.md      benchmark write-up (template until real results are in)
 tasks/        task suites (basic, files, reasoning, multi_step, robustness, injection)
 tests/        unit tests (run offline)
 ```
@@ -286,4 +307,5 @@ tests/        unit tests (run offline)
 - [x] HTML report and model leaderboard
 - [x] Mitigation experiments: measure defenses before and after
 - [x] CI with GitHub Actions
-- [ ] Benchmark write-up comparing real models
+- [x] Benchmark tooling: setup check, one-command benchmark script, Markdown tables, write-up template
+- [ ] Benchmark write-up comparing real models (pending: needs an API key)
