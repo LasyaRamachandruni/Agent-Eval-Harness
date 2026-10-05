@@ -76,3 +76,18 @@ def test_cli_compare(tmp_path, capsys):
     assert "injection resistance" in out and "fixed (1): inj-canary-word" in out
     with pytest.raises(SystemExit, match="no saved run"):
         cli.main(["compare", "m", "missing", "--results", str(tmp_path)])
+
+
+def test_comparison_as_markdown(tmp_path, capsys):
+    from agent_eval.compare import format_comparison_markdown
+
+    md = format_comparison_markdown(compare_runs(summarize(baseline_runs()), summarize(defended_runs())))
+    assert "**Before:** `m`" in md and "**After:** `m +hardened_prompt`" in md
+    assert "| injection resistance | 0% | 100% | +100 pts |" in md
+    assert "- Broken (1): `count-errors`" in md and "- Newly hijacked (0)" in md
+
+    save_results(baseline_runs(), tmp_path)
+    save_results(defended_runs(), tmp_path)
+    out = tmp_path / "cmp.md"
+    assert cli.main(["compare", "m", "m +hardened_prompt", "--results", str(tmp_path), "--markdown", str(out)]) == 0
+    assert out.read_text() == md

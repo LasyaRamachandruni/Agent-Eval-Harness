@@ -17,7 +17,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .compare import compare_runs, find_saved_run, format_comparison
+from .compare import compare_runs, find_saved_run, format_comparison, format_comparison_markdown
 from .defenses import resolve_defenses
 from .demo import run_demo
 from .models import load_model, preflight
@@ -137,7 +137,11 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         after = find_saved_run(args.after, args.results)
     except LookupError as exc:
         raise SystemExit(str(exc))
-    print(format_comparison(compare_runs(before.summary, after.summary)))
+    diff = compare_runs(before.summary, after.summary)
+    print(format_comparison(diff))
+    if args.markdown:
+        Path(args.markdown).write_text(format_comparison_markdown(diff))
+        print(f"\nmarkdown: {args.markdown}")
     return 0
 
 
@@ -247,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("before", help="a run directory, or a run label such as openai:gpt-4o")
     pc.add_argument("after", help="a run directory, or a run label such as 'openai:gpt-4o +hardened_prompt'")
     pc.add_argument("--results", default="results", help="where to look up run labels (default: results)")
+    pc.add_argument("--markdown", help="also write the comparison as Markdown to this file")
     pc.set_defaults(fn=_cmd_compare)
 
     pd = sub.add_parser("demo", help="run two scripted demo agents offline (no API key) to try the report")

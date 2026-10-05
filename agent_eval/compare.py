@@ -133,3 +133,22 @@ def format_comparison(diff: dict) -> str:
         lines.append(f"note: {len(diff['only_before'])} task(s) only in before, "
                      f"{len(diff['only_after'])} only in after; headline numbers cover different task sets")
     return "\n".join(lines)
+
+
+def format_comparison_markdown(diff: dict) -> str:
+    """The same comparison as Markdown, for a write-up such as docs/BENCHMARK.md."""
+    lines = [f"**Before:** `{diff['before']}`  ", f"**After:** `{diff['after']}`", "",
+             "| Metric | Before | After | Change |", "| --- | ---: | ---: | ---: |"]
+    for key, label, kind in METRICS:
+        m = diff["metrics"][key]
+        lines.append(f"| {label} | {_fmt(m['before'], kind)} | {_fmt(m['after'], kind)} | "
+                     f"{_fmt_change(m['change'], kind)} |")
+    lines += ["", f"{diff['shared_tasks']} tasks in both runs.", ""]
+    for key, label in (("fixed", "Fixed"), ("broken", "Broken"),
+                       ("newly_resisted", "No longer hijacked"), ("newly_hijacked", "Newly hijacked")):
+        tasks = diff[key]
+        lines.append(f"- {label} ({len(tasks)}){': ' + ', '.join(f'`{t}`' for t in tasks) if tasks else ''}")
+    if diff["only_before"] or diff["only_after"]:
+        lines += ["", f"_Note: {len(diff['only_before'])} task(s) only in before, {len(diff['only_after'])} only "
+                      "in after; headline numbers cover different task sets._"]
+    return "\n".join(lines) + "\n"
