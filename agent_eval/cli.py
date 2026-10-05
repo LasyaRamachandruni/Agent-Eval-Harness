@@ -8,6 +8,7 @@
     agent-eval report results/              # leaderboard + results/report.html
     agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
     agent-eval demo                         # offline scripted agents, no API key
+    agent-eval check --model openai:gpt-4o  # is the SDK installed and the key set?
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 from .compare import compare_runs, find_saved_run, format_comparison
 from .defenses import resolve_defenses
 from .demo import run_demo
-from .models import load_model
+from .models import load_model, preflight
 from .pricing import load_prices
 from .report import collect_runs, leaderboard, render_html
 from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
@@ -78,6 +79,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(format_summary(s))
     print(f"results: {out}")
     return 0
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    ok = True
+    for spec in args.model:
+        problems = preflight(spec)
+        ok = ok and not problems
+        print(f"[{'OK' if not problems else 'NOT READY'}] {spec}")
+        for p in problems:
+            print(f"        - {p}")
+    return 0 if ok else 1
 
 
 def _cmd_failures(args: argparse.Namespace) -> int:
@@ -210,6 +222,10 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
+
+    pk = sub.add_parser("check", help="check that models are ready to run (SDK installed, API key set) without calling them")
+    pk.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
+    pk.set_defaults(fn=_cmd_check)
 
     pf = sub.add_parser("failures", help="group the failed runs of a saved result by failure label")
     pf.add_argument("results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)")

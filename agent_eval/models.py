@@ -10,8 +10,10 @@ you actually use.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
@@ -127,3 +129,44 @@ def load_model(spec: str) -> ModelClient:
     if provider == "ollama":
         return OllamaModel(model) if model else OllamaModel()
     raise ValueError(f"unknown model provider '{provider}' (use anthropic, openai or ollama)")
+
+
+# provider -> (Python package it needs, environment variable holding its API key)
+PROVIDERS: dict[str, tuple[str | None, str | None]] = {
+    "anthropic": ("anthropic", "ANTHROPIC_API_KEY"),
+    "openai": ("openai", "OPENAI_API_KEY"),
+    "ollama": (None, None),
+}
+
+
+def preflight(spec: str, timeout: float = 3.0) -> list[str]:
+    """Problems that would stop `spec` from running, found without calling the model.
+
+    Checks that the provider is known, its SDK is installed and its API key is
+    set; for Ollama, that the local server answers and the model is pulled.
+    An empty list means the model is ready. Nothing here costs tokens.
+    """
+    provider, _, model = spec.partition(":")
+    if provider not in PROVIDERS:
+        return [f"unknown model provider '{provider}' (use {', '.join(PROVIDERS)})"]
+    package, key_var = PROVIDERS[provider]
+    problems = []
+    if package and importlib.util.find_spec(package) is None:
+        problems.append(f"the '{package}' package is not installed (pip install -e \".[{package}]\")")
+    if key_var and not os.environ.get(key_var):
+        problems.append(f"{key_var} is not set (see .env.example)")
+    if provider == "ollama":
+        problems += _ollama_problems(model or "llama3.1", timeout)
+    return problems
+
+
+def _ollama_problems(model: str, timeout: float) -> list[str]:
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{host}/api/tags", timeout=timeout) as r:
+            names = {m.get("name", "") for m in json.loads(r.read()).get("models", [])}
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return [f"cannot reach Ollama at {host} ({exc}); start it with 'ollama serve'"]
+    if model not in names and f"{model}:latest" not in names:
+        return [f"Ollama model '{model}' is not pulled (ollama pull {model})"]
+    return []
