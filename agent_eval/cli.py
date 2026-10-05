@@ -22,7 +22,7 @@ from .defenses import resolve_defenses
 from .demo import run_demo
 from .models import load_model, preflight
 from .pricing import load_prices
-from .report import collect_runs, leaderboard, render_html
+from .report import collect_runs, leaderboard, render_html, render_markdown
 from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
 from .tasks import Task, load_tasks
 
@@ -125,6 +125,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
     out = Path(args.out) if args.out else Path(args.results) / "report.html"
     out.write_text(render_html(runs, title=args.title, latest_only=latest))
     print(f"\nreport: {out}")
+    if args.markdown:
+        Path(args.markdown).write_text(render_markdown(runs, latest_only=latest))
+        print(f"markdown: {args.markdown}")
     return 0
 
 
@@ -237,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("-o", "--out", help="where to write the HTML (default: <results>/report.html)")
     pp.add_argument("--all", action="store_true", help="include every run, not just the newest per model")
     pp.add_argument("--title", default="Agent Eval Report")
+    pp.add_argument("--markdown", help="also write the tables as Markdown to this file (for a write-up)")
     pp.set_defaults(fn=_cmd_report)
 
     pc = sub.add_parser("compare", help="compare two saved runs, e.g. before and after a defense")

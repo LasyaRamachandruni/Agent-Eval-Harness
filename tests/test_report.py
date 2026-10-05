@@ -180,3 +180,30 @@ def test_terminal_leaderboard_keeps_long_labels_whole():
     assert "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted" in text
     header, row = text.splitlines()
     assert header.index("success") + len("success") == row.index("100%") + len("100%")
+
+
+def test_markdown_tables(tmp_path):
+    from agent_eval.report import render_markdown
+
+    save(tmp_path, [scripted_run("good", "hello")], "20260101T000000Z")
+    save(tmp_path, [scripted_run("bad", "nope")], "20260101T000001Z")
+    md = render_markdown(collect_runs(tmp_path))
+    lines = md.splitlines()
+    assert "| 1 | `good` | 100% |" in md and "| 2 | `bad` | 0% |" in md
+    assert lines[lines.index("### Leaderboard") + 3].startswith("| --- | --- | ---: |")
+    assert "| files | 100% | 0% |" in md
+    assert "| `wrong_answer` | 0 | 1 |" in md
+
+
+def test_markdown_without_runs():
+    from agent_eval.report import render_markdown
+
+    assert render_markdown([]) == "_No saved runs found._\n"
+
+
+def test_report_command_writes_markdown(tmp_path, capsys):
+    save(tmp_path, [scripted_run("good", "hello")], "20260101T000000Z")
+    md = tmp_path / "board.md"
+    assert cli.main(["report", str(tmp_path), "--markdown", str(md)]) == 0
+    assert "### Leaderboard" in md.read_text()
+    assert f"markdown: {md}" in capsys.readouterr().out

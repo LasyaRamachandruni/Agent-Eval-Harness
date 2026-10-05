@@ -303,3 +303,57 @@ def render_html(runs: list[SavedRun], title: str = "Agent Eval Report", latest_o
         )
     parts.append("</main></body></html>")
     return "\n".join(parts)
+
+
+# ------------------------------------------------------------ Markdown tables
+
+
+def _md_pct(x: float | None) -> str:
+    return "-" if x is None else f"{x:.0%}"
+
+
+def _md_table(headers: list[str], rows: list[list[str]], right: int = 1) -> str:
+    """A GitHub-flavoured Markdown table; columns from index `right` on are right-aligned."""
+    align = ["---" if i < right else "---:" for i in range(len(headers))]
+    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(align) + " |"]
+    lines += ["| " + " | ".join(r) + " |" for r in rows]
+    return "\n".join(lines)
+
+
+def render_markdown(runs: list[SavedRun], latest_only: bool = True) -> str:
+    """Leaderboard, success by category and failure counts as Markdown tables.
+
+    Meant for pasting into a write-up such as docs/BENCHMARK.md.
+    """
+    if latest_only:
+        runs = latest_per_model(runs)
+    rows = leaderboard(runs, latest_only=False)
+    if not rows:
+        return "_No saved runs found._\n"
+    ordered = [next(r for r in runs if r.name == row["run"]) for row in rows]
+    board = _md_table(
+        ["#", "Model", "Success", "pass^k", "Consistent", "Injection resistance", "Avg steps", "Avg tokens",
+         "Cost / run"],
+        [[str(r["rank"]), f"`{r['model']}`", _md_pct(r["success_rate"]), _md_pct(r["pass_hat_k"]),
+          f"{r['consistent_tasks']}/{r['tasks']}", _md_pct(r["injection_resistance"]), f"{r['avg_steps']:.2f}",
+          f"{r['avg_tokens']:.0f}", "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}"]
+         for r in rows],
+        right=2,
+    )
+    cats = sorted({c for r in ordered for c in r.summary.get("by_category", {})})
+    by_cat = _md_table(
+        ["Category"] + [f"`{r.model}`" for r in ordered],
+        [[c] + [_md_pct(r.summary.get("by_category", {}).get(c, {}).get("success_rate")) for r in ordered]
+         for c in cats],
+    )
+    labels = [lab for lab in LABELS if any(r["failures"].get(lab) for r in rows)]
+    parts = ["### Leaderboard", "", board, "", "### Success by category", "", by_cat, ""]
+    if labels:
+        fails = _md_table(
+            ["Failure"] + [f"`{r['model']}`" for r in rows],
+            [[f"`{lab}`"] + [str(r["failures"].get(lab, 0)) for r in rows] for lab in labels],
+        )
+        parts += ["### Failed runs by cause", "", fails, ""]
+    k = sorted({r["repeats"] for r in rows})
+    parts.append(f"_{len(rows)} run(s); trials per task: {', '.join(map(str, k))}. Costs are estimates._")
+    return "\n".join(parts) + "\n"
