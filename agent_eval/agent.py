@@ -42,6 +42,8 @@ Only use the tools listed above. Keep final answers short and exact."""
 
 @dataclass
 class Step:
+    """One turn of the agent loop: what the model said and what happened next."""
+
     index: int
     model_output: str
     action: str  # "tool", "final", or "invalid"
@@ -53,6 +55,8 @@ class Step:
 
 @dataclass
 class AgentResult:
+    """Everything one agent run produced: the answer, the full trace and its cost."""
+
     final_answer: str | None
     steps: list[Step] = field(default_factory=list)
     stop_reason: str = ""  # "final", "max_steps", "model_error"
@@ -62,10 +66,12 @@ class AgentResult:
 
     @property
     def num_steps(self) -> int:
+        """Model turns used, including invalid replies."""
         return len(self.steps)
 
     @property
     def tool_errors(self) -> int:
+        """Steps that ended in an error (bad format, unknown tool, failed call)."""
         return sum(1 for s in self.steps if s.error)
 
 
@@ -92,6 +98,12 @@ def run_agent(
     max_steps: int = 10,
     defenses: list[Defense] | None = None,
 ) -> AgentResult:
+    """Let `model` work on `task_prompt` with `tools` until it answers or runs out of steps.
+
+    Errors (bad JSON, unknown tools, failed calls) are fed back to the model so
+    it can recover; they cost a step but never crash the run. A failed model
+    API call ends the run with stop_reason "model_error".
+    """
     defenses = defenses or []
     system = apply_to_system(SYSTEM_TEMPLATE.format(tools=describe_tools(tools)), defenses)
     messages: list[dict] = [{"role": "user", "content": task_prompt}]

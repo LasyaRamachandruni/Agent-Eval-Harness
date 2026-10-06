@@ -35,10 +35,12 @@ class SavedRun:
 
     @property
     def base_model(self) -> str:
+        """The model spec the run used, without defenses."""
         return self.summary.get("model", "unknown")
 
     @property
     def defenses(self) -> list[str]:
+        """Names of the defenses the run used (empty for a baseline run)."""
         return list(self.summary.get("defenses") or [])
 
     @property

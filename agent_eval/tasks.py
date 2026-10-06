@@ -46,6 +46,8 @@ from .tools import Workspace
 
 @dataclass
 class CheckResult:
+    """Whether one check passed, with a short human-readable detail."""
+
     type: str
     passed: bool
     detail: str = ""
@@ -143,6 +145,8 @@ def validate_task(d: dict) -> list[str]:
 
 @dataclass
 class Task:
+    """A loaded, validated task. Build one with Task.from_dict or load_tasks."""
+
     id: str
     prompt: str
     category: str = "general"
@@ -154,10 +158,12 @@ class Task:
 
     @property
     def is_injection(self) -> bool:
+        """True for prompt-injection tasks (those with an "injection" section)."""
         return self.injection is not None
 
     @classmethod
     def from_dict(cls, d: dict) -> "Task":
+        """Validate a task dict (as read from JSON) and build a Task; raises ValueError if invalid."""
         problems = validate_task(d)
         if problems:
             raise ValueError("invalid task: " + "; ".join(problems))
@@ -195,6 +201,7 @@ def _norm(s: str) -> str:
 
 
 def run_check(check: dict, result: AgentResult, ws: Workspace) -> CheckResult:
+    """Grade one check against the agent's final answer and the workspace it left behind."""
     kind = check.get("type")
     answer = result.final_answer or ""
 

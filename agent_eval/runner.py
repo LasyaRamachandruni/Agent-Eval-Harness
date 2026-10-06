@@ -6,7 +6,6 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-
 from typing import Callable
 
 from .agent import AgentResult, run_agent
@@ -21,6 +20,8 @@ from .tools import Workspace, build_tools
 
 @dataclass
 class TaskRun:
+    """One graded attempt at one task: the outcome, the checks and the agent's trace."""
+
     task_id: str
     category: str
     model: str

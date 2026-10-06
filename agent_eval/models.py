@@ -20,15 +20,23 @@ from dataclasses import dataclass
 
 @dataclass
 class ModelReply:
+    """The text of one model reply and the tokens it used."""
+
     text: str
     input_tokens: int = 0
     output_tokens: int = 0
 
 
 class ModelClient:
+    """Base class for models. Subclass it and implement `complete` to plug in any model.
+
+    `name` identifies the model in results and reports, e.g. "openai:gpt-4o".
+    """
+
     name: str = "base"
 
     def complete(self, system: str, messages: list[dict]) -> ModelReply:  # pragma: no cover
+        """Return the model's next reply to a system prompt and a list of chat messages."""
         raise NotImplementedError
 
 
@@ -46,6 +54,8 @@ class ScriptedModel(ModelClient):
 
 
 class AnthropicModel(ModelClient):
+    """Claude models through the Anthropic SDK (reads ANTHROPIC_API_KEY)."""
+
     def __init__(self, model: str = "claude-sonnet-4-5", max_tokens: int = 1024):
         import anthropic  # lazy import
 
@@ -67,6 +77,8 @@ class AnthropicModel(ModelClient):
 
 
 class OpenAIModel(ModelClient):
+    """OpenAI chat models through the OpenAI SDK (reads OPENAI_API_KEY)."""
+
     def __init__(self, model: str = "gpt-4o-mini", max_tokens: int = 1024):
         import openai  # lazy import
 

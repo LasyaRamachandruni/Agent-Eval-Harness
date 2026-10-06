@@ -231,6 +231,7 @@ def format_summary(s: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse the command line and run the chosen subcommand; returns the exit code."""
     p = argparse.ArgumentParser(prog="agent-eval", description="Evaluate LLM agents on tool-using tasks.")
     sub = p.add_subparsers(dest="command", required=True)
 

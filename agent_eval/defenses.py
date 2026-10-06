@@ -47,6 +47,8 @@ def tag_observation(tool: str, text: str) -> str:
 
 @dataclass(frozen=True)
 class Defense:
+    """A prompt-level defense: extra system-prompt text and/or a wrapper for tool output."""
+
     name: str
     description: str
     system_suffix: str = ""

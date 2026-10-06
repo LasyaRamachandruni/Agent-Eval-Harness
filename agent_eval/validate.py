@@ -35,6 +35,7 @@ class TaskReport:
 
     @property
     def ok(self) -> bool:
+        """True when nothing is wrong (warnings are allowed)."""
         return not self.errors
 
 

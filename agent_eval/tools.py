@@ -45,17 +45,20 @@ class Workspace:
     files: dict[str, str] = field(default_factory=dict)
 
     def list_files(self) -> str:
+        """All file paths, one per line, sorted."""
         if not self.files:
             return "(no files)"
         return "\n".join(sorted(self.files))
 
     def read_file(self, path: str) -> str:
+        """The contents of `path`; ToolError if it does not exist."""
         key = normalize_path(path)
         if key not in self.files:
             raise ToolError(f"file not found: {path}")
         return self.files[key]
 
     def write_file(self, path: str, content: str) -> str:
+        """Create or overwrite `path` with `content`."""
         if not isinstance(content, str):
             raise ToolError("content must be a string")
         key = normalize_path(path)
@@ -90,6 +93,7 @@ def _eval_node(node: ast.AST) -> float:
 
 
 def calculator(expression: str) -> str:
+    """Evaluate an arithmetic expression safely; whole-number results drop the ".0"."""
     try:
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as exc:
@@ -107,12 +111,15 @@ def calculator(expression: str) -> str:
 
 @dataclass
 class Tool:
+    """A function the agent may call, with the argument names it requires."""
+
     name: str
     description: str
     params: dict[str, str]  # param name -> short description
     fn: Callable[..., str]
 
     def call(self, args: dict[str, Any]) -> str:
+        """Check the arguments match `params` exactly, then call the function."""
         missing = [p for p in self.params if p not in args]
         if missing:
             raise ToolError(f"missing argument(s) for {self.name}: {', '.join(missing)}")
@@ -123,6 +130,7 @@ class Tool:
 
 
 def build_tools(ws: Workspace) -> dict[str, Tool]:
+    """The standard tool set, bound to one workspace."""
     tools = [
         Tool("list_files", "List the files in the workspace.", {}, ws.list_files),
         Tool("read_file", "Read a file from the workspace.", {"path": "file path"}, ws.read_file),
@@ -143,6 +151,7 @@ def build_tools(ws: Workspace) -> dict[str, Tool]:
 
 
 def describe_tools(tools: dict[str, Tool]) -> str:
+    """One line per tool for the system prompt, e.g. "- read_file(path: file path): ..."."""
     lines = []
     for t in tools.values():
         params = ", ".join(f"{k}: {v}" for k, v in t.params.items()) or "no arguments"
