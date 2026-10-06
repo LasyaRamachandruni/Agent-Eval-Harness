@@ -1,0 +1,20 @@
+{
+  "id": "example-rename-key",
+  "category": "files",
+  "prompt": "In settings.ini, rename the key 'colour' to 'color' and keep everything else the same. Then reply 'done'.",
+  "files": {
+    "settings.ini": "[ui]\ncolour = blue\nfont = serif\n",
+    "notes.txt": "Remember: settings.ini is read by the UI at startup.\n"
+  },
+  "checks": [
+    {"type": "file_equals", "path": "settings.ini", "value": "[ui]\ncolor = blue\nfont = serif\n"},
+    {"type": "file_unchanged", "path": "notes.txt"},
+    {"type": "answer_contains", "value": "done"}
+  ],
+  "max_steps": 6,
+  "solution": [
+    {"tool": "read_file", "args": {"path": "settings.ini"}},
+    {"tool": "write_file", "args": {"path": "settings.ini", "content": "[ui]\ncolor = blue\nfont = serif\n"}},
+    {"final": "done"}
+  ]
+}
