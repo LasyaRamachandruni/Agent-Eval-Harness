@@ -180,3 +180,26 @@ def test_normal_task_has_no_resistance_score():
     task = Task.from_dict({"id": "t", "prompt": "p", "checks": [{"type": "answer_equals", "value": "1"}]})
     run = run_task(ScriptedModel([final("1")]), task)
     assert run.resisted is None and run.injection_checks == []
+
+
+def test_workspace_normalizes_paths():
+    ws = Workspace(files={"notes.txt": "hi", "data/a.csv": "1"})
+    assert ws.read_file("./notes.txt") == "hi"
+    assert ws.read_file("/data/a.csv") == "1"
+    assert ws.read_file("data//./a.csv") == "1"
+    ws.write_file("./out.txt", "x")
+    assert ws.files["out.txt"] == "x"
+
+
+@pytest.mark.parametrize("path", ["", "  ", ".", "../secret", "data/../../x", None])
+def test_workspace_rejects_bad_paths(path):
+    ws = Workspace(files={"a": "1"})
+    with pytest.raises(ToolError):
+        ws.read_file(path)
+    with pytest.raises(ToolError):
+        ws.write_file(path, "x")
+
+
+def test_write_file_needs_string_content():
+    with pytest.raises(ToolError, match="content must be a string"):
+        Workspace().write_file("a.txt", {"not": "text"})

@@ -17,8 +17,31 @@ class ToolError(Exception):
     """Raised when a tool is called with bad arguments or fails."""
 
 
+def normalize_path(path: str) -> str:
+    """Map the spellings a model might use for one file to a single key.
+
+    "notes.txt", "./notes.txt" and "/notes.txt" are the same workspace file, so
+    an agent is not marked wrong for a harmless "./" prefix. Paths that try to
+    leave the workspace ("../x") or are not strings are rejected.
+    """
+    if not isinstance(path, str) or not path.strip():
+        raise ToolError("path must be a non-empty string")
+    parts = []
+    for part in path.strip().replace("\\", "/").split("/"):
+        if part in ("", "."):
+            continue
+        if part == "..":
+            raise ToolError(f"path must stay inside the workspace: {path}")
+        parts.append(part)
+    if not parts:
+        raise ToolError(f"not a file path: {path}")
+    return "/".join(parts)
+
+
 @dataclass
 class Workspace:
+    """The in-memory files one task run can see and change (path -> contents)."""
+
     files: dict[str, str] = field(default_factory=dict)
 
     def list_files(self) -> str:
@@ -27,13 +50,17 @@ class Workspace:
         return "\n".join(sorted(self.files))
 
     def read_file(self, path: str) -> str:
-        if path not in self.files:
+        key = normalize_path(path)
+        if key not in self.files:
             raise ToolError(f"file not found: {path}")
-        return self.files[path]
+        return self.files[key]
 
     def write_file(self, path: str, content: str) -> str:
-        self.files[path] = content
-        return f"wrote {len(content)} characters to {path}"
+        if not isinstance(content, str):
+            raise ToolError("content must be a string")
+        key = normalize_path(path)
+        self.files[key] = content
+        return f"wrote {len(content)} characters to {key}"
 
 
 # --- calculator -------------------------------------------------------------
