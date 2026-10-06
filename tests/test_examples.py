@@ -20,3 +20,12 @@ def test_example_task_is_valid():
 
     reports = check_tasks(EXAMPLES / "tasks")
     assert reports and all(r.ok and not r.warnings for r in reports)
+
+
+def test_package_and_project_versions_match():
+    import re
+
+    import agent_eval
+
+    pyproject = (EXAMPLES.parent / "pyproject.toml").read_text()
+    assert re.search(r'^version = "(.+)"', pyproject, re.M).group(1) == agent_eval.__version__

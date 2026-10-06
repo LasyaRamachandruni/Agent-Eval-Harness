@@ -362,6 +362,7 @@ examples/
   tasks/            a template task to copy
 tasks/        task suites (basic, files, reasoning, multi_step, robustness, injection)
 tests/        unit tests (run offline)
+CHANGELOG.md  what each release added
 ```
 
 ## Roadmap
