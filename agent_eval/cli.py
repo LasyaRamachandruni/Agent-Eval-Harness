@@ -9,6 +9,7 @@
     agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
     agent-eval demo                         # offline scripted agents, no API key
     agent-eval check --model openai:gpt-4o  # is the SDK installed and the key set?
+    agent-eval validate tasks/my_suite/     # schema + replay each task's solution
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from .pricing import load_prices
 from .report import collect_runs, leaderboard, render_html, render_markdown
 from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
 from .tasks import Task, load_tasks
+from .validate import check_tasks
 
 
 def select_tasks(args: argparse.Namespace) -> list[Task]:
@@ -90,6 +92,25 @@ def _cmd_check(args: argparse.Namespace) -> int:
         for p in problems:
             print(f"        - {p}")
     return 0 if ok else 1
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    try:
+        reports = check_tasks(args.tasks)
+    except ValueError as exc:
+        print(f"[INVALID] {exc}")
+        return 1
+    for r in reports:
+        if r.errors or (r.warnings and args.verbose):
+            print(f"[{'OK' if r.ok else 'FAIL'}] {r.task_id}")
+            for msg in r.errors:
+                print(f"        error: {msg}")
+            for msg in r.warnings:
+                print(f"        warning: {msg}")
+    bad = sum(not r.ok for r in reports)
+    warned = sum(bool(r.warnings) for r in reports)
+    print(f"{len(reports) - bad}/{len(reports)} tasks valid; {warned} with warnings (-v to show)")
+    return 1 if bad else 0
 
 
 def _cmd_failures(args: argparse.Namespace) -> int:
@@ -233,6 +254,11 @@ def main(argv: list[str] | None = None) -> int:
     pk = sub.add_parser("check", help="check that models are ready to run (SDK installed, API key set) without calling them")
     pk.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
     pk.set_defaults(fn=_cmd_check)
+
+    pv = sub.add_parser("validate", help="check task files: schema, and that each solution passes and each attack is caught")
+    pv.add_argument("tasks", nargs="?", default="tasks", help="a task file or a folder of them")
+    pv.add_argument("-v", "--verbose", action="store_true", help="also show warnings")
+    pv.set_defaults(fn=_cmd_validate)
 
     pf = sub.add_parser("failures", help="group the failed runs of a saved result by failure label")
     pf.add_argument("results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)")
