@@ -21,6 +21,12 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Run tests
         run: python -m pytest -q
+      - name: Validate tasks
+        run: |
+          agent-eval validate tasks
+          agent-eval validate examples/tasks
+      - name: Library example
+        run: python examples/library_usage.py
       - name: Offline demo and report
         run: |
           agent-eval demo --out results/demo
