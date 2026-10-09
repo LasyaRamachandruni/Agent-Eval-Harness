@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — 2026-10-09
+
+- **Agent strategies**: `--strategy direct|react|reflection|reflexion`, ported from Basic_-React_Agent_Langchain, Langgraph_Reflection_Agent and Neural-Reflexion-Agent onto the harness's own model interface. Reflexion uses the grounding check and stop-when-no-improvement score from Neural-Reflexion-Agent.
+- **Native tool calling**: `--protocol native` for Anthropic, OpenAI and Ollama, next to the JSON-action protocol.
+- **Benchmarks**: HotpotQA (seeded 200-question dev distractor subset, offline search over the provided paragraphs, official EM and F1) and HumanEval (pass@k with a sandboxed subprocess runner: timeout, resource limits, no network). `agent-eval download` verifies checksums; `agent-eval selfcheck` replays reference answers through the graders.
+- **Runner**: concurrent runs (`--concurrency`), retries with backoff on rate limits, a response cache keyed by model, prompt, params and trial, resumable results (`--resume`, `--run-dir`), live cost and `--budget`, `--temperature` (default now 0.7) and `--max-tokens`.
+- **Cost before running**: `agent-eval estimate` and `agent-eval plan`.
+- **scripts/run_real_models.sh**: every model x benchmark x strategy, 5 repeats, with an estimate and confirmation first.
+- **Engineering**: type hints checked by mypy, ruff lint and format, pre-commit, coverage, typed settings from environment variables, JSON structured logging, CI with lint, type and test jobs.
+
+Pending: real-model results (need API keys).
+
 ## 1.0.0 — 2026-10-06
 
 First complete release. Everything runs offline except real model calls.
