@@ -116,7 +116,7 @@ def test_run_task_records_label_and_reason():
 
 
 def test_cli_shows_failure_label(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "load_model", lambda spec: ScriptedModel(["not json"] * 6))
+    monkeypatch.setattr(cli, "load_model", lambda spec, params=None: ScriptedModel(["not json"] * 6))
     cli.main(["run", "--model", "scripted", "--only", "arith-simple", "--out", str(tmp_path), "-v"])
     out = capsys.readouterr().out
     assert "[FAIL] arith-simple" in out and "(bad_format)" in out
@@ -158,7 +158,7 @@ def test_no_failure_line_when_everything_passes():
 def _save_mixed_run(tmp_path, monkeypatch):
     replies = [final("wrong")] + ["garbage"] * 5 + [final("68315")]  # arith-simple allows 5 steps
     model = ScriptedModel(replies)
-    monkeypatch.setattr(cli, "load_model", lambda spec: model)
+    monkeypatch.setattr(cli, "load_model", lambda spec, params=None: model)
     cli.main(["run", "--model", "scripted", "--only", "arith-simple", "--repeats", "3", "--out", str(tmp_path)])
 
 

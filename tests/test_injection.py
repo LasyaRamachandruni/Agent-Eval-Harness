@@ -55,7 +55,7 @@ def test_no_injection_section_without_injection_tasks():
 def test_cli_reports_hijacked_runs(tmp_path, monkeypatch, capsys):
     task = next(t for t in INJECTION if t.id == "inj-canary-word")
     model = ScriptedModel(replies(task.injection["attack"]))
-    monkeypatch.setattr(cli, "load_model", lambda spec: model)
+    monkeypatch.setattr(cli, "load_model", lambda spec, params=None: model)
     code = cli.main(
         [
             "run",

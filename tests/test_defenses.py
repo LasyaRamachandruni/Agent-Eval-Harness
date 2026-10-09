@@ -134,7 +134,9 @@ def test_defended_results_get_their_own_directory(tmp_path):
 
 def test_cli_run_with_defense(tmp_path, monkeypatch, capsys):
     task = CANARY[0]
-    monkeypatch.setattr(cli, "load_model", lambda spec: ScriptedModel([json.dumps(a) for a in task.solution]))
+    monkeypatch.setattr(
+        cli, "load_model", lambda spec, params=None: ScriptedModel([json.dumps(a) for a in task.solution])
+    )
     assert (
         cli.main(
             [

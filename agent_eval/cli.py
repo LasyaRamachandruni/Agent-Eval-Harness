@@ -10,6 +10,9 @@ agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
 agent-eval demo                         # offline scripted agents, no API key
 agent-eval check --model openai:gpt-4o  # is the SDK installed and the key set?
 agent-eval validate tasks/my_suite/     # schema + replay each task's solution
+agent-eval download all                 # fetch HotpotQA and HumanEval (checksummed)
+agent-eval estimate --model openai:gpt-4o-mini --benchmark humaneval --repeats 5
+agent-eval run --model openai:gpt-4o-mini --benchmark hotpotqa --strategy reflexion --repeats 5
 """
 
 from __future__ import annotations
@@ -17,14 +20,22 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
+from .benchmarks import BENCHMARKS, MissingDataError, load_benchmark
+from .benchmarks.download import DownloadError, download
 from .compare import compare_runs, find_saved_run, format_comparison, format_comparison_markdown
+from .config import ConfigError, Settings
 from .defenses import resolve_defenses
 from .demo import run_demo
-from .models import load_model, preflight
+from .estimate import estimate_run
+from .executor import Progress, ResultLog, ResumeError, RunConfig, prepare_model, run_suite_concurrently
+from .logs import configure_logging
+from .models import GenerationParams, load_model, preflight
 from .pricing import load_prices
 from .report import collect_runs, leaderboard, render_html, render_markdown
-from .runner import TaskRun, find_run_dir, load_run_records, run_suite, save_results, summarize
+from .runner import TaskRun, find_run_dir, load_run_records, new_run_dir, run_label, write_summary
+from .strategies import PROTOCOLS, STRATEGIES, Strategy, get_strategy
 from .tasks import Task, load_tasks
 from .validate import check_tasks
 
@@ -43,6 +54,41 @@ def select_tasks(args: argparse.Namespace) -> list[Task]:
     return tasks
 
 
+def select_items(args: argparse.Namespace, settings: Settings) -> list[Any]:
+    """Items to run: built-in tasks (with --category/--only) or a downloaded benchmark (with --only/--limit)."""
+    if args.benchmark == "builtin":
+        items: list[Any] = select_tasks(args)
+    else:
+        if getattr(args, "category", None):
+            raise SystemExit("--category only applies to the builtin benchmark")
+        data_dir = Path(args.data_dir) if args.data_dir else settings.data_dir
+        try:
+            items = load_benchmark(args.benchmark, data_dir)
+        except MissingDataError as exc:
+            raise SystemExit(str(exc)) from exc
+        if getattr(args, "only", None):
+            wanted = set(args.only.split(","))
+            items = [i for i in items if i.id in wanted]
+    if getattr(args, "limit", None):
+        items = items[: args.limit]
+    if not items:
+        raise SystemExit("no tasks matched the filters")
+    return items
+
+
+def build_strategy(args: argparse.Namespace) -> Strategy:
+    """The strategy chosen with --strategy/--protocol and its options."""
+    options: dict[str, Any] = {}
+    if args.strategy == "reflection":
+        options["rounds"] = args.reflection_rounds
+    if args.strategy == "reflexion":
+        options["trials"] = args.reflexion_trials
+    try:
+        return get_strategy(args.strategy, protocol=args.protocol, **options)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def _cmd_list(args: argparse.Namespace) -> int:
     for t in select_tasks(args):
         extra = f"  injection: {t.injection['goal']}" if t.injection is not None else ""
@@ -51,35 +97,112 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    tasks = select_tasks(args)
+    settings = _settings()
+    items = select_items(args, settings)
     prices = load_prices(args.prices) if args.prices else None
     try:
         defenses = resolve_defenses(args.defense)
+        params = GenerationParams(temperature=args.temperature, max_tokens=args.max_tokens)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-    model = load_model(args.model)
+    strategy = build_strategy(args)
+    concurrency = args.concurrency or settings.concurrency
+    model = load_model(args.model, params)
+    config = RunConfig(
+        model=model.name,
+        strategy=strategy.label,
+        benchmark=args.benchmark,
+        repeats=args.repeats,
+        params=params.as_dict(),
+        defenses=[d.name for d in defenses],
+        items=len(items),
+    )
+    label = run_label(model.name, config.defenses, strategy.label)
+    run_dir = Path(args.resume) if args.resume else new_run_dir(args.out, label)
+    try:
+        result_log = ResultLog(run_dir, config)
+    except ResumeError as exc:
+        raise SystemExit(str(exc)) from exc
+    cache_path = None if args.no_cache else settings.cache_dir / "responses.sqlite"
+    wrapped, cache = prepare_model(model, cache_path, settings.max_retries)
     if defenses:
         print(f"defenses: {', '.join(d.name for d in defenses)}")
+    print(f"{label}: {args.benchmark}, {len(items)} item(s) x {args.repeats} trial(s), {concurrency} at a time")
 
-    def show(run: TaskRun) -> None:
+    def show(run: TaskRun, progress: Progress) -> None:
         mark = "PASS" if run.passed else "FAIL"
         if run.resisted is False:
             mark = "HIJACKED"
         trial = f" #{run.trial + 1}" if args.repeats > 1 else ""
         why = f"  ({run.failure})" if run.failure else ""
-        print(f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}{why}")
+        print(
+            f"[{mark}] {run.task_id + trial:<32} steps={run.agent.num_steps:<3} stop={run.agent.stop_reason}{why}"
+            f"  [{progress.done}/{progress.total} ${progress.spent_usd:.4f}]"
+        )
         if not run.passed and args.verbose:
             print(f"        why: {run.failure_reason}")
             for c in run.checks + run.injection_checks:
                 if not c.passed:
                     print(f"        - {c.type}: {c.detail}")
 
-    runs = run_suite(model, tasks, repeats=args.repeats, on_run=show, defenses=defenses)
-    s = summarize(runs, prices)
-    out = save_results(runs, args.out, prices)
+    try:
+        runs = run_suite_concurrently(
+            wrapped,
+            items,
+            strategy=strategy,
+            repeats=args.repeats,
+            concurrency=concurrency,
+            defenses=defenses,
+            benchmark=args.benchmark,
+            result_log=result_log,
+            on_run=show,
+            budget_usd=args.budget,
+            prices=prices,
+        )
+    finally:
+        if cache is not None:
+            cache.close()
+    if not runs:
+        raise SystemExit("no runs finished")
+    s = write_summary(run_dir, runs, prices)
     print()
     print(format_summary(s))
-    print(f"results: {out}")
+    expected = len(items) * args.repeats
+    if len(runs) < expected:
+        print(f"incomplete: {len(runs)}/{expected} runs; continue with --resume {run_dir}")
+    print(f"results: {run_dir}")
+    return 0
+
+
+def _cmd_estimate(args: argparse.Namespace) -> int:
+    settings = _settings()
+    items = select_items(args, settings)
+    prices = load_prices(args.prices) if args.prices else None
+    total = None
+    for spec in args.model:
+        est = estimate_run(spec, items, args.strategy, args.benchmark, args.repeats, args.protocol, prices)
+        cost = "unknown price" if est.cost_usd is None else f"${est.cost_usd:,.2f}"
+        print(
+            f"{spec:<40} {args.benchmark:<10} {args.strategy:<11} {est.runs:>6} runs "
+            f"{est.input_tokens / 1e6:>8.2f}M in {est.output_tokens / 1e6:>6.2f}M out  {cost}"
+        )
+        total = est if total is None else total + est
+    if total is not None and len(args.model) > 1:
+        cost = "unknown" if total.cost_usd is None else f"${total.cost_usd:,.2f}"
+        print(f"{'total':<40} {'':<22} {total.runs:>6} runs  {cost}")
+    return 0
+
+
+def _cmd_download(args: argparse.Namespace) -> int:
+    settings = _settings()
+    data_dir = Path(args.data_dir) if args.data_dir else settings.data_dir
+    try:
+        paths = download(args.datasets, data_dir, force=args.force)
+    except (DownloadError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    for path in paths:
+        print(f"ready: {path}")
+    print(f"checksums: {data_dir / 'CHECKSUMS'}")
     return 0
 
 
@@ -229,6 +352,26 @@ def format_summary(s: dict) -> str:
     return "\n".join(lines)
 
 
+def _settings() -> Settings:
+    try:
+        return Settings.from_env()
+    except ConfigError as exc:
+        raise SystemExit(f"configuration error: {exc}") from exc
+
+
+def _add_selection(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--benchmark", default="builtin", choices=BENCHMARKS, help="what to run (default: builtin)")
+    p.add_argument("--tasks", default="tasks", help="task folder for the builtin benchmark")
+    p.add_argument("--category", help="comma-separated categories to run, e.g. injection (builtin only)")
+    p.add_argument("--only", help="comma-separated task ids to run")
+    p.add_argument("--limit", type=int, help="run only the first N items")
+    p.add_argument("--data-dir", help="benchmark data folder (default: $AGENT_EVAL_DATA_DIR or data)")
+    p.add_argument("--strategy", default="react", choices=list(STRATEGIES), help="agent strategy (default: react)")
+    p.add_argument("--protocol", default="json", choices=PROTOCOLS, help="json actions or native tool calling")
+    p.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
+    p.add_argument("--prices", help='JSON file of per-model prices, e.g. {"openai:gpt-4o": [2.5, 10]}')
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse the command line and run the chosen subcommand; returns the exit code."""
     p = argparse.ArgumentParser(prog="agent-eval", description="Evaluate LLM agents on tool-using tasks.")
@@ -240,18 +383,31 @@ def main(argv: list[str] | None = None) -> int:
     pl.set_defaults(fn=_cmd_list)
 
     pr = sub.add_parser("run", help="run tasks against a model")
-    pr.add_argument(
-        "--model", required=True, help="e.g. anthropic:claude-sonnet-4-5, openai:gpt-4o-mini, ollama:llama3.1"
-    )
-    pr.add_argument("--tasks", default="tasks")
-    pr.add_argument("--category", help="comma-separated categories to run, e.g. injection")
-    pr.add_argument("--only", help="comma-separated task ids to run")
-    pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
-    pr.add_argument("--prices", help='JSON file of per-model prices, e.g. {"openai:gpt-4o": [2.5, 10]}')
+    pr.add_argument("--model", required=True, help="e.g. anthropic:claude-haiku-4-5-20251001, openai:gpt-4o-mini")
+    _add_selection(pr)
+    pr.add_argument("--temperature", type=float, default=0.7, help="sampling temperature (default: 0.7)")
+    pr.add_argument("--max-tokens", type=int, default=1024, help="max tokens per model reply (default: 1024)")
+    pr.add_argument("--reflection-rounds", type=int, default=2, help="critique rounds for --strategy reflection")
+    pr.add_argument("--reflexion-trials", type=int, default=3, help="max attempts for --strategy reflexion")
     pr.add_argument("--defense", help="comma-separated injection defenses: hardened_prompt, tag_untrusted, all")
+    pr.add_argument("--concurrency", type=int, help="runs in flight at once (default: $AGENT_EVAL_CONCURRENCY or 4)")
+    pr.add_argument("--budget", type=float, help="stop starting new runs once this many USD are spent")
+    pr.add_argument("--no-cache", action="store_true", help="do not read or write the response cache")
+    pr.add_argument("--resume", help="continue an interrupted run directory instead of starting a new one")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
+
+    pe = sub.add_parser("estimate", help="estimate tokens and cost of a run without calling any model")
+    pe.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
+    _add_selection(pe)
+    pe.set_defaults(fn=_cmd_estimate)
+
+    pw = sub.add_parser("download", help="download benchmark data (HotpotQA, HumanEval) and verify checksums")
+    pw.add_argument("datasets", nargs="+", help="hotpotqa, humaneval or all")
+    pw.add_argument("--data-dir", help="where to put the data (default: $AGENT_EVAL_DATA_DIR or data)")
+    pw.add_argument("--force", action="store_true", help="download again even if a verified copy exists")
+    pw.set_defaults(fn=_cmd_download)
 
     pk = sub.add_parser(
         "check", help="check that models are ready to run (SDK installed, API key set) without calling them"
@@ -296,7 +452,10 @@ def main(argv: list[str] | None = None) -> int:
     pd.set_defaults(fn=_cmd_demo)
 
     args = p.parse_args(argv)
-    return args.fn(args)
+    settings = _settings()
+    configure_logging(settings.log_level, settings.log_format)
+    result: int = args.fn(args)
+    return result
 
 
 if __name__ == "__main__":

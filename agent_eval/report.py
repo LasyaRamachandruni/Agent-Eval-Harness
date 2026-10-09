@@ -44,9 +44,14 @@ class SavedRun:
         return list(self.summary.get("defenses") or [])
 
     @property
+    def strategy(self) -> str:
+        """The agent strategy the run used (runs saved before strategies existed are react)."""
+        return str(self.summary.get("strategy") or "react")
+
+    @property
     def model(self) -> str:
-        """Display name: the model plus any defenses it ran with."""
-        return run_label(self.base_model, self.defenses)
+        """Display name: the model plus its strategy (if not react) and any defenses."""
+        return run_label(self.base_model, self.defenses, self.strategy)
 
 
 def collect_runs(path: str | Path) -> list[SavedRun]:
@@ -101,6 +106,9 @@ def leaderboard_row(run: SavedRun) -> dict:
         "avg_cost_per_run_usd": s.get("avg_cost_per_run_usd"),
         "total_cost_usd": s.get("total_cost_usd"),
         "failures": dict(fails.get("counts", {})),
+        "strategy": run.strategy,
+        "benchmark": s.get("benchmark", "builtin"),
+        "f1": (s.get("scores") or {}).get("f1"),
     }
 
 
@@ -216,6 +224,10 @@ def _leaderboard_section(rows: list[dict]) -> str:
         ]
         for r in rows
     ]
+    if any(r["f1"] is not None for r in rows):  # HotpotQA: exact match is "Success", F1 next to it
+        headers.insert(3, "F1")
+        for line, r in zip(body, rows, strict=True):
+            line.insert(3, _pct(r["f1"]))
     return "<h2>Leaderboard</h2>" + _table(headers, body, cls="leaderboard")
 
 
@@ -353,34 +365,27 @@ def render_markdown(runs: list[SavedRun], latest_only: bool = True) -> str:
     if not rows:
         return "_No saved runs found._\n"
     ordered = [next(r for r in runs if r.name == row["run"]) for row in rows]
-    board = _md_table(
+    headers = ["#", "Model", "Success", "pass^k", "Consistent", "Injection resistance", "Avg steps", "Avg tokens"]
+    headers.append("Cost / run")
+    table = [
         [
-            "#",
-            "Model",
-            "Success",
-            "pass^k",
-            "Consistent",
-            "Injection resistance",
-            "Avg steps",
-            "Avg tokens",
-            "Cost / run",
-        ],
-        [
-            [
-                str(r["rank"]),
-                f"`{r['model']}`",
-                _md_pct(r["success_rate"]),
-                _md_pct(r["pass_hat_k"]),
-                f"{r['consistent_tasks']}/{r['tasks']}",
-                _md_pct(r["injection_resistance"]),
-                f"{r['avg_steps']:.2f}",
-                f"{r['avg_tokens']:.0f}",
-                "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}",
-            ]
-            for r in rows
-        ],
-        right=2,
-    )
+            str(r["rank"]),
+            f"`{r['model']}`",
+            _md_pct(r["success_rate"]),
+            _md_pct(r["pass_hat_k"]),
+            f"{r['consistent_tasks']}/{r['tasks']}",
+            _md_pct(r["injection_resistance"]),
+            f"{r['avg_steps']:.2f}",
+            f"{r['avg_tokens']:.0f}",
+            "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}",
+        ]
+        for r in rows
+    ]
+    if any(r["f1"] is not None for r in rows):
+        headers.insert(3, "F1")
+        for line, r in zip(table, rows, strict=True):
+            line.insert(3, _md_pct(r["f1"]))
+    board = _md_table(headers, table, right=2)
     cats = sorted({c for r in ordered for c in r.summary.get("by_category", {})})
     by_cat = _md_table(
         ["Category"] + [f"`{r.model}`" for r in ordered],

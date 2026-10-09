@@ -61,7 +61,7 @@ def test_cli_run_with_repeats_and_prices(tmp_path, monkeypatch, capsys):
     (tmp_path / "tasks" / "t.json").write_text(json.dumps(task))
     (tmp_path / "prices.json").write_text(json.dumps({"scripted": [3, 15]}))
     model = CountingModel([json.dumps({"final": "1"})] * 2 + [json.dumps({"final": "2"})])
-    monkeypatch.setattr(cli, "load_model", lambda spec: model)
+    monkeypatch.setattr(cli, "load_model", lambda spec, params=None: model)
 
     code = cli.main(
         [
