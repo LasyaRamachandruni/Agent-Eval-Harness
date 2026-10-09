@@ -13,6 +13,22 @@ Most agent demos show one lucky run. This project asks the questions that matter
 - **Why does it fail?** Every step is traced, and every failed run is automatically labelled with a failure category.
 - **Which model is best?** A static HTML report and leaderboard compare runs side by side.
 - **Do defenses help?** Optional prompt-injection defenses, and a before/after comparison of their effect.
+- **Which agent design is worth it?** The same model can run as `direct` (one call), `react`, `reflection` or `reflexion`, through a JSON-action protocol or the provider's native tool calling.
+- **Does it hold up beyond toy tasks?** Adapters for HotpotQA (multi-hop questions, exact match and F1) and HumanEval (code, pass@k with sandboxed tests).
+
+## Results
+
+**Real-model results are pending.** No API key was available where this version was built, so no model has been run yet and no model number appears in this repository. One command produces them: [`scripts/run_real_models.sh`](scripts/run_real_models.sh) (see [Benchmark](#benchmark)); it prints a cost estimate and asks before spending anything.
+
+What has been measured, with no model involved, are checks that the graders are right (`agent-eval selfcheck humaneval`, 2 vCPU Intel Xeon @ 2.10GHz, Python 3.13, 2026-10-09):
+
+| Check | Result |
+|---|---|
+| HumanEval canonical solutions pass their hidden tests in the sandbox | 164/164 |
+| Docstring examples (the visible self-check Reflexion uses) agree with the canonical solution | 73/75 problems with examples; HumanEval/47 and /116 have wrong examples in the dataset itself |
+| Offline test suite | 283 tests, 96% line coverage, no network |
+
+The HotpotQA checks (gold answers score EM 1.0; how often `search(question)` returns both supporting paragraphs in its top 3) need the dataset, which the build environment could not download: run `agent-eval download hotpotqa && agent-eval selfcheck hotpotqa`.
 
 ## Example output
 
@@ -48,27 +64,29 @@ failures: followed_injection 10
 ## How it works
 
 ```
-                     ┌────────────── run_suite (× --repeats) ──────────────┐
-task (JSON) ──load──►│ agent loop ──► tools (in-memory workspace)          │
-  validated          │    │  ▲          list_files, read_file,             │
-                     │    ▼  │          write_file, calculator             │
-                     │  model (Anthropic / OpenAI / Ollama / scripted)     │
-                     │    │      + optional defenses on prompt and output  │
-                     │    ▼                                                │
-                     │ grader: task checks + injection checks              │
-                     │    │                                                │
-                     │    ▼                                                │
-                     │ failure taxonomy: label why a failed run failed     │
-                     └────┬────────────────────────────────────────────────┘
-                          ▼
-     results/<time>_<model>/runs.jsonl (full traces) + summary.json
-                          │
-                          ▼
-     report (HTML + leaderboard) · compare (before/after) · failures
+ builtin tasks (40) ─┐                 ┌──── executor: N runs in flight, retries with backoff, ────┐
+ HotpotQA-200 ───────┼─► items ───────►│     response cache, runs.jsonl appended as runs finish     │
+ HumanEval-164 ──────┘                 │                                                            │
+                                       │  strategy: direct | react | reflection | reflexion         │
+                                       │     │  ▲      protocol: JSON actions | native tool calls    │
+                                       │     ▼  │                                                   │
+                                       │  model (Anthropic / OpenAI / Ollama / scripted)            │
+                                       │     │  ▲                                                   │
+                                       │     ▼  │                                                   │
+                                       │  environment tools: workspace files | offline Wikipedia    │
+                                       │                     paragraphs | sandboxed Python          │
+                                       │     ▼                                                      │
+                                       │  grader: checks + injection checks | EM/F1 | hidden tests  │
+                                       │  failure taxonomy: why a failed run failed                 │
+                                       └────┬───────────────────────────────────────────────────────┘
+                                            ▼
+                    results/<run>/meta.json + runs.jsonl (full traces) + summary.json
+                                            ▼
+                    report (HTML + leaderboard) · compare (before/after) · failures
 ```
 
 - **Tasks** are JSON files: a prompt, some starting files, and one or more checks (for example, "the answer equals 62.5" or "todo.txt was not modified").
-- **The agent** replies with one JSON action per turn: either a tool call or a final answer. This simple protocol works with any chat model, so different providers can be compared fairly.
+- **The agent** follows a strategy (see [Agent strategies](#agent-strategies)). By default it replies with one JSON action per turn: either a tool call or a final answer. This simple protocol works with any chat model, so different providers can be compared fairly; `--protocol native` uses each provider's own tool calling instead.
 - **Tools** run against an in-memory workspace, so runs are repeatable and nothing touches your real files. Paths are normalised (`./notes.txt` is `notes.txt`) and cannot escape the workspace.
 - **The runner** executes each task, grades it, and saves the full step-by-step trace.
 - **The summary** turns runs into numbers: success rate, pass@k and pass^k, injection resistance, failure counts, steps, tokens and estimated cost.
@@ -85,21 +103,27 @@ agent-eval list                        # see the tasks
 agent-eval validate                    # every task's solution passes and every attack is caught
 pip install -e ".[anthropic]"          # or .[openai]
 export ANTHROPIC_API_KEY=...           # see .env.example
-agent-eval check --model anthropic:claude-sonnet-4-5   # SDK installed? key set? (no API call)
-agent-eval run --model anthropic:claude-sonnet-4-5 -v
-agent-eval run --model anthropic:claude-sonnet-4-5 --repeats 5   # measure consistency
-agent-eval run --model anthropic:claude-sonnet-4-5 --category injection   # injection suite only
+M=anthropic:claude-haiku-4-5-20251001
+agent-eval check --model $M            # SDK installed? key set? (no API call)
+agent-eval run --model $M -v
+agent-eval run --model $M --repeats 5  # measure consistency (temperature 0.7 by default)
+agent-eval run --model $M --strategy reflexion --protocol native   # another agent design
+agent-eval run --model $M --category injection   # injection suite only
 agent-eval failures results/           # group the latest run's failures by cause
 agent-eval report results/             # leaderboard + results/report.html
-agent-eval run --model anthropic:claude-sonnet-4-5 --category injection --defense all
-agent-eval compare anthropic:claude-sonnet-4-5 "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted"
+agent-eval run --model $M --category injection --defense all
+agent-eval compare $M "$M +hardened_prompt+tag_untrusted"
+
+agent-eval download all                # HotpotQA + HumanEval, checksum-verified
+agent-eval estimate --model $M --benchmark humaneval --strategy react --repeats 5   # cost before running
+agent-eval run --model $M --benchmark humaneval --repeats 5
 
 # free local option
 ollama pull llama3.1
 agent-eval run --model ollama:llama3.1 -v
 ```
 
-Results land in `results/<timestamp>_<model>/` as `runs.jsonl` (full traces, one line per run) and `summary.json`.
+Results land in `results/<timestamp>_<label>/` as `meta.json` (model, strategy, benchmark, sampling params, git commit), `runs.jsonl` (full traces, one line per run, written as each run finishes) and `summary.json`.
 
 ## Task suite
 
@@ -136,6 +160,61 @@ pass@3 100%  pass^3 70%  consistent 7/10  flaky 3
 avg 2.9 steps, 1840 tokens, 2.1s per run; 4 tool errors
 estimated cost $0.1932 ($0.00644 per run)
 ```
+
+## Agent strategies
+
+`--strategy` picks how the agent goes from task to answer. All four run on the harness's own model interface (no LangChain), so they work with every provider and are compared on identical tasks, tools and graders. They port three earlier projects of mine, which now live here.
+
+| Strategy | What it does | Ported from |
+|---|---|---|
+| `direct` | One model call, no tools. The workspace files (or HotpotQA paragraphs) are pasted into the prompt. The baseline every agent design should beat. | |
+| `react` | Think, call a tool, observe, repeat until a final answer. Bad replies and failed calls are fed back so the agent can recover. The default. | Basic_-React_Agent_Langchain |
+| `reflection` | ReAct, then a reviewer call critiques the answer; on "revise" the agent continues the same conversation (it may use tools again) and answers again. Up to `--reflection-rounds` (2). | Langgraph_Reflection_Agent |
+| `reflexion` | Up to `--reflexion-trials` (3) fresh attempts from the task's original state. After each, a grounding check and a fixed score decide whether to stop, and a written reflection is given to the next attempt. The best attempt (and the files it left) is graded. | Neural-Reflexion-Agent |
+
+Reflexion's score is a hand-written checklist (in `agent_eval/grounding.py`), not a learned reward: 40 for finishing, up to 30 for evidence, up to 10 for a clean run (no tool errors), up to 20 from the model's own 0-10 rating. Evidence is a visible self-check when the benchmark has one (HumanEval: the examples in the docstring, never the hidden tests), otherwise the grounding check carried over from Neural-Reflexion-Agent: the numbers and names in the answer must appear in the task or in a tool result from that attempt. As in that project, the loop stops when an attempt does not beat the best so far, or scores at least 90.
+
+`--protocol json` (default) asks for one JSON action per turn and works with any chat model. `--protocol native` uses the provider's tool-calling API (Anthropic tool use, OpenAI function calling, Ollama tools) and finishes when the model replies with text instead of a call. Each strategy except `direct` supports both, so the protocol itself can be measured.
+
+Runs with a strategy other than `react` are labelled with it, e.g. `openai:gpt-4o-mini [reflexion/native]`, and sit side by side in the leaderboard. `num_steps` counts agent turns; reviewer calls are recorded in the trace as `reflect` steps and counted in `model_calls`.
+
+## Benchmarks: HotpotQA and HumanEval
+
+`--benchmark` selects what to run: `builtin` (the 40 tasks, default), `hotpotqa` or `humaneval`. The datasets are not committed; `agent-eval download all` fetches them into `data/` (or `$AGENT_EVAL_DATA_DIR`), checks the SHA-256 and the record count, and writes the checksums to `data/CHECKSUMS`.
+
+**HotpotQA** (distractor dev set). A fixed sample of 200 questions, drawn with `random.Random(1234)` from the sorted question ids, so it is the same on every machine. Each question comes with 10 Wikipedia paragraphs (2 with the answer, 8 distractors). Agents get two offline tools over exactly those paragraphs, `search(query)` (3 best titles by word overlap, with their first sentence) and `read_paragraph(title)`, so no live search API is involved and every run sees the same evidence. `direct` gets all 10 paragraphs inline. Scoring is the official exact match and F1 (lower-case, strip punctuation and articles); a run passes on exact match, and the summary and report also show mean F1.
+
+**HumanEval** (164 problems). The model must return the whole function. Grading runs it against the hidden `check` tests in a sandboxed subprocess (`agent_eval/sandbox.py`): fresh isolated interpreter, empty environment, temporary working directory, a 10-second timeout that kills the process group, CPU/memory/file-size limits, and no network (a separate network namespace where Linux allows it, plus an audit hook that refuses sockets, DNS, subprocesses and `os.system` everywhere). Success rate is pass@1; `--repeats k` gives pass@k and pass^k. Agents get a `run_python` tool to try code in the same sandbox; they never see the hidden tests. The sandbox is meant for model-written code in good faith, not as a security boundary against hostile code.
+
+`agent-eval selfcheck humaneval hotpotqa` replays reference answers through the graders (see [Results](#results)).
+
+## Running at scale
+
+`agent-eval run` is built to run thousands of model calls unattended:
+
+- **Concurrency**: `--concurrency N` (or `AGENT_EVAL_CONCURRENCY`, default 4) runs in flight at once.
+- **Rate limits**: 429, 5xx, Anthropic's 529, timeouts and dropped connections are retried with exponential backoff and full jitter, honouring `retry-after` (up to `AGENT_EVAL_MAX_RETRIES`, default 6). Other errors fail the run at once with `model_error`.
+- **Caching**: every reply is stored in `.cache/agent-eval/responses.sqlite`, keyed by a SHA-256 of model, sampling params, system prompt, messages, tool specs and the trial number. Repeats stay independent samples; re-running the same trial costs nothing. `--no-cache` turns it off.
+- **Resume**: each finished run is appended (and fsynced) to `runs.jsonl`. After a crash or Ctrl-C, `--resume <run dir>` runs only the missing (task, trial) pairs; `--run-dir <dir>` does the same with a fixed directory name. The configuration in `meta.json` must match.
+- **Cost**: billed tokens (cache misses) are priced live in the progress line; `--budget 5` stops starting new runs after $5 (resume later). `agent-eval estimate` and `agent-eval plan` price a run or a whole benchmark from its prompts before any call.
+- **Temperature**: `--temperature` (default 0.7, so repeats measure consistency rather than replaying one greedy answer) and `--max-tokens` are recorded in `meta.json` and are part of the cache key.
+
+## Configuration
+
+Settings come from environment variables (or a `.env` file read by the scripts); command-line flags override them. API keys are read only by the provider SDKs and are never logged.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | | provider keys |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server |
+| `AGENT_EVAL_DATA_DIR` | `data` | downloaded benchmark data |
+| `AGENT_EVAL_CACHE_DIR` | `.cache/agent-eval` | response cache |
+| `AGENT_EVAL_CONCURRENCY` | `4` | runs in flight |
+| `AGENT_EVAL_MAX_RETRIES` | `6` | retries on rate limits and server errors |
+| `AGENT_EVAL_LOG_LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `AGENT_EVAL_LOG_FORMAT` | `json` | diagnostics on stderr as JSON lines, or `text` |
+
+Diagnostics (retries, cache hits, sandbox timeouts, resumes) are structured log lines on stderr; results stay on stdout.
 
 ## Prompt-injection suite
 
@@ -269,17 +348,19 @@ newly hijacked (0)
 
 ## Benchmark
 
-**Real-model results are pending.** Everything above runs offline; the benchmark needs an API key, so it is packaged as one script to run:
+**Real-model results are pending** (they need API keys). Everything is packaged as one command:
 
 ```bash
-pip install -e ".[anthropic]"                     # and/or .[openai]
-cp .env.example .env                              # add your key; .env is git-ignored
-DRY_RUN=1 scripts/run_benchmark.sh                # show the plan without calling any model
-scripts/run_benchmark.sh                          # default: claude-haiku-4-5 and claude-sonnet-4-5
-REPEATS=5 scripts/run_benchmark.sh openai:gpt-4o-mini ollama:llama3.1
+pip install -e ".[anthropic,openai]"
+cp .env.example .env                    # ANTHROPIC_API_KEY, OPENAI_API_KEY; .env is git-ignored
+ollama pull llama3.1                    # for the local model
+DRY_RUN=1 scripts/run_real_models.sh    # show the plan without calling any model
+scripts/run_real_models.sh              # download, check, estimate, ask, run, report
 ```
 
-For each model the script checks the setup (`agent-eval check`), runs all 40 tasks `REPEATS` times (default 3), runs them again with `--defense all`, then writes `results/benchmark/report.html`, `leaderboard.md` and a `compare_<model>.md` per model. Those tables drop straight into the write-up template, [`docs/BENCHMARK.md`](docs/BENCHMARK.md), which also lists the questions the write-up should answer and the limits of the suite. `OUT` and `DEFENSE` (`none` skips the defended run) can be set the same way as `REPEATS`.
+It runs the 40 built-in tasks, HotpotQA-200 and HumanEval-164 with all four strategies on `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `gpt-4o-mini` and `llama3.1` (Ollama), 5 repeats each at temperature 0.7, and writes `results/real/<benchmark>/report.html` and `leaderboard.md`. Re-running it resumes. `MODELS`, `BENCHMARKS`, `STRATEGIES`, `REPEATS`, `BUDGET` and `PROTOCOL` narrow or change the plan; see the header of the script. The write-up template is [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
+
+The earlier [`scripts/run_benchmark.sh`](scripts/run_benchmark.sh) still runs the built-in suite with and without the injection defenses and writes the before/after comparisons.
 
 ## Task format
 
@@ -339,31 +420,64 @@ print(summarize(runs)["pass_hat_k"])
 
 ```
 agent_eval/
-  agent.py    agent loop and action parsing
-  models.py   model clients (Anthropic, OpenAI, Ollama, scripted for tests) and setup checks
-  tools.py    sandboxed workspace and tools
-  tasks.py    task loading and checks
-  runner.py   running, repeating, grading, injection scoring and summaries
-  failures.py failure taxonomy: why each failed run failed
-  metrics.py  pass@k, pass^k and consistency metrics
-  pricing.py  per-model price table and cost estimates
-  report.py   leaderboard and self-contained HTML report
-  defenses.py optional prompt-injection defenses
-  compare.py  before/after comparison of two saved runs
-  demo.py     offline scripted demo agents
-  validate.py replay each task's solution and attack to prove its checks work
-  cli.py      command line interface
+  agent.py        trace types (Step, AgentResult) and run_agent
+  strategies/     direct, react, reflection, reflexion; the agent loop in both protocols
+  environment.py  environments (tools + state, snapshot/restore) and the EvalItem interface
+  grounding.py    grounding check and attempt score used by reflexion
+  models.py       model clients (Anthropic, OpenAI, Ollama, scripted), native tool calling, setup checks
+  resilience.py   retries with exponential backoff for rate limits and server errors
+  cache.py        SQLite response cache keyed by model, prompt, params and sample
+  executor.py     concurrent runner, resumable results log, budget
+  estimate.py     token and cost estimates before running
+  tools.py        sandboxed workspace and tools
+  sandbox.py      subprocess sandbox for model-written Python
+  benchmarks/     HotpotQA and HumanEval adapters, downloads with checksums, self-checks
+  tasks.py        task loading and checks
+  grading.py      check results and grades
+  runner.py       running and grading one task, summaries, saving results
+  failures.py     failure taxonomy: why each failed run failed
+  metrics.py      pass@k, pass^k and consistency metrics
+  pricing.py      per-model price table and cost estimates
+  report.py       leaderboard and self-contained HTML report
+  defenses.py     optional prompt-injection defenses
+  compare.py      before/after comparison of two saved runs
+  demo.py         offline scripted demo agents
+  validate.py     replay each task's solution and attack to prove its checks work
+  config.py       typed settings from environment variables
+  logs.py         JSON (or text) structured logging
+  cli.py          command line interface
 scripts/
-  run_benchmark.sh  full benchmark: baseline + defended runs, report, comparisons
+  run_real_models.sh  the real-model benchmark: every model, benchmark and strategy
+  run_benchmark.sh    built-in suite with and without injection defenses
 docs/
-  BENCHMARK.md      benchmark write-up (template until real results are in)
+  BENCHMARK.md        benchmark write-up (template until real results are in)
 examples/
-  library_usage.py  evaluate a custom model from Python
-  tasks/            a template task to copy
+  library_usage.py    evaluate a custom model from Python
+  tasks/              a template task to copy
 tasks/        task suites (basic, files, reasoning, multi_step, robustness, injection)
-tests/        unit tests (run offline)
+tests/        unit tests (run offline, with fake models and fake SDKs)
 CHANGELOG.md  what each release added
 ```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pre-commit install          # ruff lint + format and mypy on every commit
+ruff check . && ruff format --check . && mypy
+python -m pytest            # with a coverage report
+```
+
+CI (GitHub Actions) runs lint, format and type checks, then the tests on Python 3.10-3.12, task validation, the library example and the offline demo. Development tools are pinned in `pyproject.toml`; the package itself has no runtime dependencies beyond the optional provider SDKs.
+
+## Design choices and limits
+
+- **No framework dependency.** Each strategy is a short module on a two-method model interface, so a result can be traced to a prompt, and providers are swapped without changing agent code.
+- **Same tools, same graders.** Strategies differ only in how they use the model; HotpotQA retrieval is offline over the provided paragraphs, so differences come from the agent, not from a search API.
+- **Estimates, not bills.** Costs come from list prices in `agent_eval/pricing.py` and a token approximation (characters / 4); `summary.json` has the measured tokens after a run.
+- **Model availability.** `claude-sonnet-4-5-20250929` is deprecated (retirement planned for 2026-11-30) and `claude-haiku-4-5-20251001` may be retired soon after 2026-10-15; replace them in `MODELS` if the run is later.
+- **Sandbox.** Good isolation for benchmark code, not a security boundary against deliberately hostile code.
+- **Small suites.** 40 synthetic tasks, 200 HotpotQA questions and 164 HumanEval problems show relative behaviour, with wide confidence intervals at this size.
 
 ## Roadmap
 
@@ -377,4 +491,7 @@ CHANGELOG.md  what each release added
 - [x] Mitigation experiments: measure defenses before and after
 - [x] CI with GitHub Actions
 - [x] Benchmark tooling: setup check, one-command benchmark script, Markdown tables, write-up template
-- [ ] Benchmark write-up comparing real models (pending: needs an API key)
+- [x] Agent strategies (direct, ReAct, Reflection, Reflexion) and native tool calling
+- [x] HotpotQA and HumanEval adapters with checksum-verified downloads and a code sandbox
+- [x] Concurrency, retries, response cache, resume, cost estimates and budgets
+- [ ] Benchmark write-up comparing real models (pending: needs API keys; `scripts/run_real_models.sh`)
