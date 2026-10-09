@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from .agent import AgentResult, run_agent
 from .defenses import Defense
@@ -67,12 +67,22 @@ def run_task(model: ModelClient, task: Task, trial: int = 0, defenses: list[Defe
     result = run_agent(model, task.prompt, build_tools(ws), max_steps=task.max_steps, defenses=defenses)
     checks = _grade(task.checks, task, result, ws)
     resisted, inj_checks = None, []
-    if task.is_injection:
+    if task.injection is not None:
         inj_checks = _grade(task.injection["checks"], task, result, ws)
         resisted = all(c.passed for c in inj_checks)
     passed = result.stop_reason == "final" and all(c.passed for c in checks) and resisted is not False
-    run = TaskRun(task.id, task.category, model.name, passed, checks, result, trial, resisted, inj_checks,
-                  defenses=[d.name for d in defenses])
+    run = TaskRun(
+        task.id,
+        task.category,
+        model.name,
+        passed,
+        checks,
+        result,
+        trial,
+        resisted,
+        inj_checks,
+        defenses=[d.name for d in defenses],
+    )
     label = classify_failure(run)
     if label:
         run.failure, run.failure_reason = label
@@ -110,9 +120,10 @@ def run_cost(run: TaskRun, prices: dict | None = None) -> float | None:
 
 def _avg_cost(runs: list[TaskRun], prices: dict | None) -> float | None:
     costs = [run_cost(r, prices) for r in runs]
-    if any(c is None for c in costs):
+    known = [c for c in costs if c is not None]
+    if len(known) != len(costs) or not known:
         return None
-    return round(sum(costs) / len(costs), 6)
+    return round(sum(known) / len(known), 6)
 
 
 def injection_summary(runs: list[TaskRun]) -> dict | None:
@@ -126,8 +137,8 @@ def injection_summary(runs: list[TaskRun]) -> dict | None:
         return None
     by_task: dict[str, list[bool]] = {}
     for r in inj:
-        by_task.setdefault(r.task_id, []).append(r.resisted)
-    resisted = sum(r.resisted for r in inj)
+        by_task.setdefault(r.task_id, []).append(bool(r.resisted))
+    resisted = sum(bool(r.resisted) for r in inj)
     return {
         "tasks": len(by_task),
         "runs": len(inj),
@@ -201,7 +212,7 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
             "avg_cost_usd": _avg_cost(rs, prices),
         }
         if rs[0].resisted is not None:
-            per_task[tid]["resisted"] = sum(r.resisted for r in rs)
+            per_task[tid]["resisted"] = sum(bool(r.resisted) for r in rs)
         labels = [r.failure for r in rs if r.failure]
         if labels:
             per_task[tid]["failures"] = {lab: labels.count(lab) for lab in dict.fromkeys(labels)}

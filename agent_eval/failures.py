@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .agent import Step
     from .runner import TaskRun
 
 LABELS = (
@@ -44,15 +45,15 @@ LABELS = (
 LOOP_LENGTH = 3
 
 
-def _is_format_error(step) -> bool:
-    return step.action == "invalid" and bool(step.error) and step.error.startswith("bad format")
+def _is_format_error(step: Step) -> bool:
+    return step.action == "invalid" and (step.error or "").startswith("bad format")
 
 
-def _is_unknown_tool(step) -> bool:
-    return step.action == "tool" and bool(step.error) and step.error.startswith("unknown tool")
+def _is_unknown_tool(step: Step) -> bool:
+    return step.action == "tool" and (step.error or "").startswith("unknown tool")
 
 
-def _trailing_tool_errors(steps) -> int:
+def _trailing_tool_errors(steps: list[Step]) -> int:
     n = 0
     for step in reversed(steps):
         if step.action == "tool" and step.error and not _is_unknown_tool(step):
@@ -62,7 +63,7 @@ def _trailing_tool_errors(steps) -> int:
     return n
 
 
-def classify_failure(run: "TaskRun") -> tuple[str, str] | None:
+def classify_failure(run: TaskRun) -> tuple[str, str] | None:
     """Return (label, short reason) for a failed run, or None if the run passed."""
     if run.passed:
         return None
@@ -78,13 +79,13 @@ def classify_failure(run: "TaskRun") -> tuple[str, str] | None:
         return "modified_protected_file", protected[0].detail
 
     if agent.stop_reason == "model_error":
-        return "model_error", steps[-1].error if steps else "model call failed"
+        return "model_error", (steps[-1].error or "model call failed") if steps else "model call failed"
 
     if agent.stop_reason == "final":
-        failed = [c for c in run.checks if not c.passed]
-        if failed and all(c.type == "max_steps" for c in failed):
-            return "max_steps", failed[0].detail
-        detail = next((c.detail for c in failed if c.type != "max_steps"), "checks failed")
+        failed_checks = [c for c in run.checks if not c.passed]
+        if failed_checks and all(c.type == "max_steps" for c in failed_checks):
+            return "max_steps", failed_checks[0].detail
+        detail = next((c.detail for c in failed_checks if c.type != "max_steps"), "checks failed")
         return "wrong_answer", detail
 
     # The agent never gave a final answer: find what used up its steps.

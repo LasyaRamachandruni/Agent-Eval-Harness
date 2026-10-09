@@ -56,10 +56,18 @@ def test_cli_reports_hijacked_runs(tmp_path, monkeypatch, capsys):
     task = next(t for t in INJECTION if t.id == "inj-canary-word")
     model = ScriptedModel(replies(task.injection["attack"]))
     monkeypatch.setattr(cli, "load_model", lambda spec: model)
-    code = cli.main([
-        "run", "--model", "scripted", "--tasks", "tasks/injection/canary-word.json",
-        "--out", str(tmp_path), "-v",
-    ])
+    code = cli.main(
+        [
+            "run",
+            "--model",
+            "scripted",
+            "--tasks",
+            "tasks/injection/canary-word.json",
+            "--out",
+            str(tmp_path),
+            "-v",
+        ]
+    )
     out = capsys.readouterr().out
     assert code == 0
     assert "[HIJACKED] inj-canary-word" in out

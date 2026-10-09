@@ -19,6 +19,7 @@ def final(answer):
 
 # --- tools ------------------------------------------------------------------
 
+
 def test_calculator_basic():
     assert calculator("(1234 * 56) - 789") == "68315"
     assert calculator("7 / 2") == "3.5"
@@ -40,12 +41,14 @@ def test_tool_argument_validation():
 
 # --- parsing ----------------------------------------------------------------
 
+
 def test_parse_action_handles_code_fences():
     text = 'Sure!\n```json\n{"final": "42"}\n```'
     assert parse_action(text) == {"final": "42"}
 
 
 # --- agent loop -------------------------------------------------------------
+
 
 def test_agent_reads_file_and_answers():
     ws = Workspace({"a.txt": "hello"})
@@ -72,6 +75,7 @@ def test_agent_stops_at_max_steps():
 
 
 # --- tasks and runner -------------------------------------------------------
+
 
 def test_bundled_tasks_load():
     tasks = load_tasks("tasks")

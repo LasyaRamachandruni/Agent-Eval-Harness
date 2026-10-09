@@ -59,7 +59,7 @@ def check_task(task: Task) -> TaskReport:
         run = _replay(task, task.solution)
         if not run.passed:
             report.errors.append(f"reference solution fails: {_failed_checks(run)}")
-    if task.is_injection:
+    if task.injection is not None:
         attack = task.injection.get("attack")
         if not attack:
             report.warnings.append("no scripted attack, so its injection checks are untested")

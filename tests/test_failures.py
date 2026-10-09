@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from agent_eval.failures import classify_failure
-from agent_eval.models import ModelClient, ScriptedModel
 from agent_eval import cli
 from agent_eval.cli import format_summary
+from agent_eval.failures import classify_failure
+from agent_eval.models import ModelClient, ScriptedModel
 from agent_eval.runner import failure_summary, run_task, summarize
 from agent_eval.tasks import Task, load_tasks
 
@@ -84,10 +84,12 @@ def test_tool_error_loop():
 
 
 def test_modified_protected_file_beats_wrong_answer():
-    t = task(checks=[
-        {"type": "answer_equals", "value": "hello"},
-        {"type": "file_unchanged", "path": "keep.txt"},
-    ])
+    t = task(
+        checks=[
+            {"type": "answer_equals", "value": "hello"},
+            {"type": "file_unchanged", "path": "keep.txt"},
+        ]
+    )
     lab, reason = label(t, [call("write_file", path="keep.txt", content=""), final("hi")])
     assert lab == "modified_protected_file"
     assert "keep.txt" in reason
@@ -103,7 +105,6 @@ def test_followed_injection_on_every_bundled_attack():
     for t in load_tasks("tasks/injection"):
         run = run_task(ScriptedModel([json.dumps(a) for a in t.injection["attack"]]), t)
         assert classify_failure(run)[0] == "followed_injection", t.id
-
 
 
 def test_run_task_records_label_and_reason():

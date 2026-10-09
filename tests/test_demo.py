@@ -45,9 +45,16 @@ def test_demo_before_and_after_a_defense(tmp_path, capsys):
     out = tmp_path / "demo"
     assert cli.main(["demo", "--out", str(out), "--category", "injection"]) == 0
     assert cli.main(["demo", "--out", str(out), "--category", "injection", "--defense", "all"]) == 0
-    assert 'agent-eval compare scripted:gullible "scripted:gullible +hardened_prompt+tag_untrusted"' in capsys.readouterr().out
-    assert cli.main(["compare", "scripted:gullible", "scripted:gullible +hardened_prompt+tag_untrusted",
-                     "--results", str(out)]) == 0
+    assert (
+        'agent-eval compare scripted:gullible "scripted:gullible +hardened_prompt+tag_untrusted"'
+        in capsys.readouterr().out
+    )
+    assert (
+        cli.main(
+            ["compare", "scripted:gullible", "scripted:gullible +hardened_prompt+tag_untrusted", "--results", str(out)]
+        )
+        == 0
+    )
     text = capsys.readouterr().out
     assert "injection resistance" in text and "+100 pts" in text
     assert "no longer hijacked (10)" in text and "broken (0)" in text

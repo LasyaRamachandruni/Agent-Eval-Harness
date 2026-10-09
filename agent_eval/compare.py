@@ -41,7 +41,9 @@ def find_saved_run(ref: str, results: str | Path = "results") -> SavedRun:
             return runs[0]
     matches = [r for r in collect_runs(results) if r.model == ref]
     if not matches:
-        raise LookupError(f"no saved run found for {ref!r} (not a run directory, and no run with that label in {results})")
+        raise LookupError(
+            f"no saved run found for {ref!r} (not a run directory, and no run with that label in {results})"
+        )
     return matches[-1]  # collect_runs returns oldest first
 
 
@@ -93,7 +95,7 @@ def compare_runs(before: dict, after: dict) -> dict:
     }
 
 
-def _fmt(value, kind: str) -> str:
+def _fmt(value: float | None, kind: str) -> str:
     if value is None:
         return "-"
     if kind == "rate":
@@ -103,7 +105,7 @@ def _fmt(value, kind: str) -> str:
     return f"{value:g}"
 
 
-def _fmt_change(change, kind: str) -> str:
+def _fmt_change(change: float | None, kind: str) -> str:
     if change is None:
         return "-"
     if change == 0:
@@ -121,34 +123,54 @@ def format_comparison(diff: dict) -> str:
     lines.append(f"{'metric':<22}{'before':>10}{'after':>10}{'change':>12}")
     for key, label, kind in METRICS:
         m = diff["metrics"][key]
-        lines.append(f"{label:<22}{_fmt(m['before'], kind):>10}{_fmt(m['after'], kind):>10}"
-                     f"{_fmt_change(m['change'], kind):>12}")
+        lines.append(
+            f"{label:<22}{_fmt(m['before'], kind):>10}{_fmt(m['after'], kind):>10}{_fmt_change(m['change'], kind):>12}"
+        )
     lines.append("")
     lines.append(f"{diff['shared_tasks']} tasks in both runs")
-    for key, label in (("fixed", "fixed"), ("broken", "broken"),
-                       ("newly_resisted", "no longer hijacked"), ("newly_hijacked", "newly hijacked")):
+    for key, label in (
+        ("fixed", "fixed"),
+        ("broken", "broken"),
+        ("newly_resisted", "no longer hijacked"),
+        ("newly_hijacked", "newly hijacked"),
+    ):
         tasks = diff[key]
         lines.append(f"{label} ({len(tasks)}){': ' + ', '.join(tasks) if tasks else ''}")
     if diff["only_before"] or diff["only_after"]:
-        lines.append(f"note: {len(diff['only_before'])} task(s) only in before, "
-                     f"{len(diff['only_after'])} only in after; headline numbers cover different task sets")
+        lines.append(
+            f"note: {len(diff['only_before'])} task(s) only in before, "
+            f"{len(diff['only_after'])} only in after; headline numbers cover different task sets"
+        )
     return "\n".join(lines)
 
 
 def format_comparison_markdown(diff: dict) -> str:
     """The same comparison as Markdown, for a write-up such as docs/BENCHMARK.md."""
-    lines = [f"**Before:** `{diff['before']}`  ", f"**After:** `{diff['after']}`", "",
-             "| Metric | Before | After | Change |", "| --- | ---: | ---: | ---: |"]
+    lines = [
+        f"**Before:** `{diff['before']}`  ",
+        f"**After:** `{diff['after']}`",
+        "",
+        "| Metric | Before | After | Change |",
+        "| --- | ---: | ---: | ---: |",
+    ]
     for key, label, kind in METRICS:
         m = diff["metrics"][key]
-        lines.append(f"| {label} | {_fmt(m['before'], kind)} | {_fmt(m['after'], kind)} | "
-                     f"{_fmt_change(m['change'], kind)} |")
+        lines.append(
+            f"| {label} | {_fmt(m['before'], kind)} | {_fmt(m['after'], kind)} | {_fmt_change(m['change'], kind)} |"
+        )
     lines += ["", f"{diff['shared_tasks']} tasks in both runs.", ""]
-    for key, label in (("fixed", "Fixed"), ("broken", "Broken"),
-                       ("newly_resisted", "No longer hijacked"), ("newly_hijacked", "Newly hijacked")):
+    for key, label in (
+        ("fixed", "Fixed"),
+        ("broken", "Broken"),
+        ("newly_resisted", "No longer hijacked"),
+        ("newly_hijacked", "Newly hijacked"),
+    ):
         tasks = diff[key]
         lines.append(f"- {label} ({len(tasks)}){': ' + ', '.join(f'`{t}`' for t in tasks) if tasks else ''}")
     if diff["only_before"] or diff["only_after"]:
-        lines += ["", f"_Note: {len(diff['only_before'])} task(s) only in before, {len(diff['only_after'])} only "
-                      "in after; headline numbers cover different task sets._"]
+        lines += [
+            "",
+            f"_Note: {len(diff['only_before'])} task(s) only in before, {len(diff['only_after'])} only "
+            "in after; headline numbers cover different task sets._",
+        ]
     return "\n".join(lines) + "\n"

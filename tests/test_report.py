@@ -5,7 +5,6 @@ import json
 import pytest
 
 from agent_eval import cli
-
 from agent_eval.models import ScriptedModel
 from agent_eval.report import collect_runs, latest_per_model, leaderboard, render_html
 from agent_eval.runner import TaskRun, run_task, save_results
@@ -91,7 +90,7 @@ def test_html_report_compares_models_and_is_self_contained(tmp_path):
     page = render_html(collect_runs(tmp_path), title="Nightly")
     assert page.startswith("<!doctype html>") and page.rstrip().endswith("</html>")
     assert "<title>Nightly</title>" in page
-    assert "<table class=\"leaderboard\">" in page
+    assert '<table class="leaderboard">' in page
     for section in ("Leaderboard", "Success by category", "Failure breakdown"):
         assert section in page
     assert page.index("scripted:good") < page.index("scripted:bad")  # ranked best first
@@ -128,7 +127,7 @@ def test_per_task_grid_shows_trials_failures_and_hijacks(tmp_path):
     save(tmp_path, [scripted_run("scripted:careful", "hello"), run_task(careful, INJ_TASK)], "20261001T000000Z")
     save(tmp_path, [scripted_run("scripted:gullible", "nope"), run_task(gullible, INJ_TASK)], "20261001T000001Z")
     page = render_html(collect_runs(tmp_path))
-    grid = page[page.index("Per-task results"):]
+    grid = page[page.index("Per-task results") :]
     assert "read-a" in grid and "inj-canary" in grid
     assert grid.count(">1/1<") == 2 and grid.count(">0/1<") == 2
     assert "hijacked</span>" in grid and "wrong_answer" in grid
@@ -161,8 +160,11 @@ def test_defended_run_is_a_separate_leaderboard_entry(tmp_path):
     from agent_eval.defenses import resolve_defenses
 
     base = run_task(ScriptedModel([call("read_file", path="a.txt"), final("hello")], name="m"), TASK)
-    defended = run_task(ScriptedModel([call("read_file", path="a.txt"), final("hello")], name="m"), TASK,
-                        defenses=resolve_defenses("hardened_prompt"))
+    defended = run_task(
+        ScriptedModel([call("read_file", path="a.txt"), final("hello")], name="m"),
+        TASK,
+        defenses=resolve_defenses("hardened_prompt"),
+    )
     save(tmp_path, [base], "20261001T000000Z")
     save(tmp_path, [defended], "20261002T000000Z")
     runs = collect_runs(tmp_path)
@@ -174,8 +176,16 @@ def test_defended_run_is_a_separate_leaderboard_entry(tmp_path):
 
 
 def test_terminal_leaderboard_keeps_long_labels_whole():
-    rows = [{"rank": 1, "model": "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted",
-             "success_rate": 1.0, "pass_hat_k": 1.0, "injection_resistance": None, "avg_cost_per_run_usd": None}]
+    rows = [
+        {
+            "rank": 1,
+            "model": "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted",
+            "success_rate": 1.0,
+            "pass_hat_k": 1.0,
+            "injection_resistance": None,
+            "avg_cost_per_run_usd": None,
+        }
+    ]
     text = cli.format_leaderboard(rows)
     assert "anthropic:claude-sonnet-4-5 +hardened_prompt+tag_untrusted" in text
     header, row = text.splitlines()

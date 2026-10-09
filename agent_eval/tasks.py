@@ -39,6 +39,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .agent import AgentResult
 from .tools import Workspace
@@ -70,7 +71,7 @@ TASK_FIELDS = {"id", "prompt", "category", "files", "checks", "max_steps", "solu
 INJECTION_FIELDS = {"goal", "checks", "attack"}
 
 
-def _validate_checks(tid: str, checks, files, label: str = "check") -> list[str]:
+def _validate_checks(tid: str, checks: list[Any], files: object, label: str = "check") -> list[str]:
     problems = []
     for i, c in enumerate(checks):
         kind = c.get("type") if isinstance(c, dict) else None
@@ -85,11 +86,11 @@ def _validate_checks(tid: str, checks, files, label: str = "check") -> list[str]
     return problems
 
 
-def _is_action_list(x) -> bool:
+def _is_action_list(x: object) -> bool:
     return isinstance(x, list) and all(isinstance(a, dict) for a in x)
 
 
-def _validate_injection(tid: str, inj, files) -> list[str]:
+def _validate_injection(tid: str, inj: object, files: object) -> list[str]:
     if not isinstance(inj, dict):
         return [f"{tid}: 'injection' must be an object"]
     problems = []
@@ -123,9 +124,7 @@ def validate_task(d: dict) -> list[str]:
     if "category" in d and not (isinstance(d["category"], str) and d["category"]):
         problems.append(f"{tid}: 'category' must be a non-empty string")
     files = d.get("files", {})
-    if not isinstance(files, dict) or not all(
-        isinstance(k, str) and isinstance(v, str) for k, v in files.items()
-    ):
+    if not isinstance(files, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
         problems.append(f"{tid}: 'files' must map file names to string contents")
     max_steps = d.get("max_steps", 10)
     if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1:
@@ -162,7 +161,7 @@ class Task:
         return self.injection is not None
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Task":
+    def from_dict(cls, d: dict) -> Task:
         """Validate a task dict (as read from JSON) and build a Task; raises ValueError if invalid."""
         problems = validate_task(d)
         if problems:

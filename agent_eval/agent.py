@@ -129,9 +129,7 @@ def run_agent(
         except (ValueError, json.JSONDecodeError) as exc:
             step = Step(i, reply.text, "invalid", error=f"bad format: {exc}")
             result.steps.append(step)
-            messages.append(
-                {"role": "user", "content": f"Error: {step.error}. Reply with one JSON object."}
-            )
+            messages.append({"role": "user", "content": f"Error: {step.error}. Reply with one JSON object."})
             continue
 
         if "final" in action:
@@ -158,7 +156,7 @@ def run_agent(
         if step.error:
             feedback = f"Error: {step.error}"
         else:
-            feedback = f"Result:\n{apply_to_observation(name, step.observation, defenses)}"
+            feedback = f"Result:\n{apply_to_observation(str(name), step.observation or '', defenses)}"
         messages.append({"role": "user", "content": feedback})
     else:
         result.stop_reason = "max_steps"

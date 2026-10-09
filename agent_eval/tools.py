@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import ast
 import operator
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 class ToolError(Exception):
@@ -69,7 +70,7 @@ class Workspace:
 # --- calculator -------------------------------------------------------------
 # A tiny safe evaluator: numbers and + - * / // % ** only. No eval().
 
-_OPS = {
+_OPS: dict[type[ast.AST], Callable[..., Any]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -108,6 +109,7 @@ def calculator(expression: str) -> str:
 
 
 # --- registry ---------------------------------------------------------------
+
 
 @dataclass
 class Tool:

@@ -162,7 +162,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 """
 
 
-def _esc(x) -> str:
+def _esc(x: object) -> str:
     return html.escape(str(x), quote=True)
 
 
@@ -189,18 +189,28 @@ def _table(headers: list[str], rows: list[list[str]], cls: str = "") -> str:
 
 
 def _leaderboard_section(rows: list[dict]) -> str:
-    headers = ["#", "Model", "Success", "pass^k", "Consistent", "Injection resistance",
-               "Avg steps", "Avg tokens", "Cost / run", "Total cost"]
+    headers = [
+        "#",
+        "Model",
+        "Success",
+        "pass^k",
+        "Consistent",
+        "Injection resistance",
+        "Avg steps",
+        "Avg tokens",
+        "Cost / run",
+        "Total cost",
+    ]
     body = [
         [
             str(r["rank"]),
             f'<span title="{_esc(r["run"])}">{_esc(r["model"])}</span>',
             _pct(r["success_rate"], bar=True),
             f'{_pct(r["pass_hat_k"])} <span class="na">k={r["repeats"]}</span>',
-            f'{r["consistent_tasks"]}/{r["tasks"]}',
+            f"{r['consistent_tasks']}/{r['tasks']}",
             _pct(r["injection_resistance"], bar=r["injection_resistance"] is not None),
-            f'{r["avg_steps"]:.1f}',
-            f'{r["avg_tokens"]:.0f}',
+            f"{r['avg_steps']:.1f}",
+            f"{r['avg_tokens']:.0f}",
             _usd(r["avg_cost_per_run_usd"]),
             _usd(r["total_cost_usd"], 4),
         ]
@@ -231,12 +241,18 @@ def _failure_section(runs: list[SavedRun]) -> str:
     labels = [lab for lab in LABELS if any(lab in c for c in counts)]
     labels += sorted({lab for c in counts for lab in c} - set(labels))  # e.g. "unlabelled"
     if not labels:
-        return "<h2>Failure breakdown</h2><p class=\"note\">No failed runs.</p>"
-    body = [[_esc(lab)] + [str(c.get(lab, 0)) if c.get(lab) else '<span class="na">0</span>' for c in counts]
-            for lab in labels]
-    body.append(["<b>total failed</b>"] + [f"<b>{(r.summary.get('failures') or {}).get('failed_runs', 0)}</b>" for r in runs])
-    return ("<h2>Failure breakdown</h2><p class=\"note\">Failed runs by cause "
-            "(see the failure taxonomy in the README).</p>" + _table(["Label"] + [_esc(r.model) for r in runs], body))
+        return '<h2>Failure breakdown</h2><p class="note">No failed runs.</p>'
+    body = [
+        [_esc(lab)] + [str(c.get(lab, 0)) if c.get(lab) else '<span class="na">0</span>' for c in counts]
+        for lab in labels
+    ]
+    body.append(
+        ["<b>total failed</b>"] + [f"<b>{(r.summary.get('failures') or {}).get('failed_runs', 0)}</b>" for r in runs]
+    )
+    return (
+        '<h2>Failure breakdown</h2><p class="note">Failed runs by cause '
+        "(see the failure taxonomy in the README).</p>" + _table(["Label"] + [_esc(r.model) for r in runs], body)
+    )
 
 
 def _task_cell(t: dict | None) -> str:
@@ -261,13 +277,13 @@ def _task_section(runs: list[SavedRun]) -> str:
     if not tasks:
         return ""
     body = [
-        [f"{_esc(tid)} <span class=\"na\">{_esc(cat)}</span>"]
+        [f'{_esc(tid)} <span class="na">{_esc(cat)}</span>']
         + [_task_cell(r.summary.get("per_task", {}).get(tid)) for r in runs]
         for tid, cat in sorted(tasks.items(), key=lambda kv: (kv[1], kv[0]))
     ]
     return (
         f"<h2>Per-task results</h2><details open><summary>{len(tasks)} tasks: trials passed per model, "
-        "with the failure label (or <span class=\"bad\">hijacked</span>) when a task failed</summary>"
+        'with the failure label (or <span class="bad">hijacked</span>) when a task failed</summary>'
         + _table(["Task"] + [_esc(r.model) for r in runs], body)
         + "</details>"
     )
@@ -296,8 +312,12 @@ def render_html(runs: list[SavedRun], title: str = "Agent Eval Report", latest_o
     if not ordered:
         parts.append('<p class="note">No saved runs found.</p>')
     else:
-        parts += [_leaderboard_section(rows), _category_section(ordered), _failure_section(ordered),
-                  _task_section(ordered)]
+        parts += [
+            _leaderboard_section(rows),
+            _category_section(ordered),
+            _failure_section(ordered),
+            _task_section(ordered),
+        ]
         parts.append(
             '<p class="note">Success: share of runs that passed. pass^k: chance that all k trials of a task pass. '
             "Injection resistance: share of injection runs where the agent did not follow the hidden "
@@ -334,19 +354,40 @@ def render_markdown(runs: list[SavedRun], latest_only: bool = True) -> str:
         return "_No saved runs found._\n"
     ordered = [next(r for r in runs if r.name == row["run"]) for row in rows]
     board = _md_table(
-        ["#", "Model", "Success", "pass^k", "Consistent", "Injection resistance", "Avg steps", "Avg tokens",
-         "Cost / run"],
-        [[str(r["rank"]), f"`{r['model']}`", _md_pct(r["success_rate"]), _md_pct(r["pass_hat_k"]),
-          f"{r['consistent_tasks']}/{r['tasks']}", _md_pct(r["injection_resistance"]), f"{r['avg_steps']:.2f}",
-          f"{r['avg_tokens']:.0f}", "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}"]
-         for r in rows],
+        [
+            "#",
+            "Model",
+            "Success",
+            "pass^k",
+            "Consistent",
+            "Injection resistance",
+            "Avg steps",
+            "Avg tokens",
+            "Cost / run",
+        ],
+        [
+            [
+                str(r["rank"]),
+                f"`{r['model']}`",
+                _md_pct(r["success_rate"]),
+                _md_pct(r["pass_hat_k"]),
+                f"{r['consistent_tasks']}/{r['tasks']}",
+                _md_pct(r["injection_resistance"]),
+                f"{r['avg_steps']:.2f}",
+                f"{r['avg_tokens']:.0f}",
+                "-" if r["avg_cost_per_run_usd"] is None else f"${r['avg_cost_per_run_usd']:.5f}",
+            ]
+            for r in rows
+        ],
         right=2,
     )
     cats = sorted({c for r in ordered for c in r.summary.get("by_category", {})})
     by_cat = _md_table(
         ["Category"] + [f"`{r.model}`" for r in ordered],
-        [[c] + [_md_pct(r.summary.get("by_category", {}).get(c, {}).get("success_rate")) for r in ordered]
-         for c in cats],
+        [
+            [c] + [_md_pct(r.summary.get("by_category", {}).get(c, {}).get("success_rate")) for r in ordered]
+            for c in cats
+        ],
     )
     labels = [lab for lab in LABELS if any(r["failures"].get(lab) for r in rows)]
     parts = ["### Leaderboard", "", board, "", "### Success by category", "", by_cat, ""]

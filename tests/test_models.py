@@ -32,10 +32,12 @@ def fake_sdk(monkeypatch, name, client_class, client):
 
 
 def test_anthropic_client(monkeypatch):
-    endpoint = Recorder(NS(
-        content=[NS(type="text", text='{"final": '), NS(type="tool_use"), NS(type="text", text='"4"}')],
-        usage=NS(input_tokens=12, output_tokens=3),
-    ))
+    endpoint = Recorder(
+        NS(
+            content=[NS(type="text", text='{"final": '), NS(type="tool_use"), NS(type="text", text='"4"}')],
+            usage=NS(input_tokens=12, output_tokens=3),
+        )
+    )
     fake_sdk(monkeypatch, "anthropic", "Anthropic", NS(messages=endpoint))
     model = AnthropicModel("claude-test")
     reply = model.complete("SYS", MESSAGES)
@@ -47,10 +49,12 @@ def test_anthropic_client(monkeypatch):
 
 
 def test_openai_client(monkeypatch):
-    endpoint = Recorder(NS(
-        choices=[NS(message=NS(content='{"final": "4"}'))],
-        usage=NS(prompt_tokens=20, completion_tokens=5),
-    ))
+    endpoint = Recorder(
+        NS(
+            choices=[NS(message=NS(content='{"final": "4"}'))],
+            usage=NS(prompt_tokens=20, completion_tokens=5),
+        )
+    )
     fake_sdk(monkeypatch, "openai", "OpenAI", NS(chat=NS(completions=endpoint)))
     reply = OpenAIModel("gpt-test").complete("SYS", MESSAGES)
     assert (reply.text, reply.input_tokens, reply.output_tokens) == ('{"final": "4"}', 20, 5)

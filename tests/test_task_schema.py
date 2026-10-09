@@ -38,7 +38,10 @@ def test_valid_task_has_no_problems():
         ({"injection": {"goal": "g", "checks": []}}, "injection needs"),
         ({"injection": {"goal": "g", "checks": [{"type": "nope"}]}}, "injection check 0"),
         ({"injection": {"goal": "g", "checks": [{"type": "file_absent", "path": "x"}], "attack": "x"}}, "attack"),
-        ({"injection": {"goal": "g", "checks": [{"type": "file_absent", "path": "x"}], "extra": 1}}, "unknown injection"),
+        (
+            {"injection": {"goal": "g", "checks": [{"type": "file_absent", "path": "x"}], "extra": 1}},
+            "unknown injection",
+        ),
     ],
 )
 def test_invalid_tasks_are_rejected(change, fragment):

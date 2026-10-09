@@ -21,8 +21,8 @@ are only partly helped, which is what the real benchmark measures.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .defenses import Defense
 from .models import ModelClient, ModelReply, ScriptedModel
@@ -35,7 +35,7 @@ def _careful(task: Task) -> list[dict]:
 
 
 def _gullible(task: Task) -> list[dict]:
-    if task.is_injection and task.injection.get("attack"):
+    if task.injection is not None and task.injection.get("attack"):
         return task.injection["attack"]
     return task.solution or []
 

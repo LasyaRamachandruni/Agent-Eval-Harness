@@ -119,9 +119,7 @@ class OllamaModel(ModelClient):
                 "options": {"temperature": 0},
             }
         ).encode()
-        req = urllib.request.Request(
-            f"{self.host}/api/chat", data=body, headers={"Content-Type": "application/json"}
-        )
+        req = urllib.request.Request(f"{self.host}/api/chat", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=300) as r:
             data = json.loads(r.read())
         return ModelReply(

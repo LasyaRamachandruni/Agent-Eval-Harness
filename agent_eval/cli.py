@@ -1,15 +1,15 @@
 """Command line entry point.
 
-    agent-eval run --model anthropic:claude-sonnet-4-5 --tasks tasks/
-    agent-eval run --model ollama:llama3.1 --category injection
-    agent-eval run --model ollama:llama3.1 --category injection --defense all
-    agent-eval list --tasks tasks/
-    agent-eval failures results/            # why did the latest run's tasks fail?
-    agent-eval report results/              # leaderboard + results/report.html
-    agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
-    agent-eval demo                         # offline scripted agents, no API key
-    agent-eval check --model openai:gpt-4o  # is the SDK installed and the key set?
-    agent-eval validate tasks/my_suite/     # schema + replay each task's solution
+agent-eval run --model anthropic:claude-sonnet-4-5 --tasks tasks/
+agent-eval run --model ollama:llama3.1 --category injection
+agent-eval run --model ollama:llama3.1 --category injection --defense all
+agent-eval list --tasks tasks/
+agent-eval failures results/            # why did the latest run's tasks fail?
+agent-eval report results/              # leaderboard + results/report.html
+agent-eval compare MODEL "MODEL +hardened_prompt"   # before/after a defense
+agent-eval demo                         # offline scripted agents, no API key
+agent-eval check --model openai:gpt-4o  # is the SDK installed and the key set?
+agent-eval validate tasks/my_suite/     # schema + replay each task's solution
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def select_tasks(args: argparse.Namespace) -> list[Task]:
 
 def _cmd_list(args: argparse.Namespace) -> int:
     for t in select_tasks(args):
-        extra = f"  injection: {t.injection['goal']}" if t.is_injection else ""
+        extra = f"  injection: {t.injection['goal']}" if t.injection is not None else ""
         print(f"{t.id:<28} {t.category:<12} {len(t.checks)} check(s){extra}")
     return 0
 
@@ -56,7 +56,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         defenses = resolve_defenses(args.defense)
     except ValueError as exc:
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
     model = load_model(args.model)
     if defenses:
         print(f"defenses: {', '.join(d.name for d in defenses)}")
@@ -117,7 +117,7 @@ def _cmd_failures(args: argparse.Namespace) -> int:
     try:
         run_dir = find_run_dir(args.results)
     except FileNotFoundError as exc:
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
     records = load_run_records(run_dir)
     failed = [r for r in records if not r["passed"]]
     if args.label:
@@ -157,7 +157,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         before = find_saved_run(args.before, args.results)
         after = find_saved_run(args.after, args.results)
     except LookupError as exc:
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
     diff = compare_runs(before.summary, after.summary)
     print(format_comparison(diff))
     if args.markdown:
@@ -171,7 +171,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     try:
         defenses = resolve_defenses(args.defense)
     except ValueError as exc:
-        raise SystemExit(str(exc))
+        raise SystemExit(str(exc)) from exc
     for path in run_demo(tasks, args.out, defenses):
         print(f"saved {path}")
     print(f"\nnext: agent-eval report {args.out}")
@@ -198,8 +198,7 @@ def format_summary(s: dict) -> str:
     """Human-readable summary lines for the end of a run."""
     k = s["repeats"]
     lines = [
-        f"{s['passed']}/{s['runs']} runs passed ({s['success_rate']:.0%}) "
-        f"across {s['tasks']} tasks x {k} trial(s)",
+        f"{s['passed']}/{s['runs']} runs passed ({s['success_rate']:.0%}) across {s['tasks']} tasks x {k} trial(s)",
     ]
     if k > 1:
         lines.append(
@@ -241,28 +240,36 @@ def main(argv: list[str] | None = None) -> int:
     pl.set_defaults(fn=_cmd_list)
 
     pr = sub.add_parser("run", help="run tasks against a model")
-    pr.add_argument("--model", required=True, help="e.g. anthropic:claude-sonnet-4-5, openai:gpt-4o-mini, ollama:llama3.1")
+    pr.add_argument(
+        "--model", required=True, help="e.g. anthropic:claude-sonnet-4-5, openai:gpt-4o-mini, ollama:llama3.1"
+    )
     pr.add_argument("--tasks", default="tasks")
     pr.add_argument("--category", help="comma-separated categories to run, e.g. injection")
     pr.add_argument("--only", help="comma-separated task ids to run")
     pr.add_argument("--repeats", type=int, default=1, help="run each task N times to measure consistency")
-    pr.add_argument("--prices", help="JSON file of per-model prices, e.g. {\"openai:gpt-4o\": [2.5, 10]}")
+    pr.add_argument("--prices", help='JSON file of per-model prices, e.g. {"openai:gpt-4o": [2.5, 10]}')
     pr.add_argument("--defense", help="comma-separated injection defenses: hardened_prompt, tag_untrusted, all")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
 
-    pk = sub.add_parser("check", help="check that models are ready to run (SDK installed, API key set) without calling them")
+    pk = sub.add_parser(
+        "check", help="check that models are ready to run (SDK installed, API key set) without calling them"
+    )
     pk.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
     pk.set_defaults(fn=_cmd_check)
 
-    pv = sub.add_parser("validate", help="check task files: schema, and that each solution passes and each attack is caught")
+    pv = sub.add_parser(
+        "validate", help="check task files: schema, and that each solution passes and each attack is caught"
+    )
     pv.add_argument("tasks", nargs="?", default="tasks", help="a task file or a folder of them")
     pv.add_argument("-v", "--verbose", action="store_true", help="also show warnings")
     pv.set_defaults(fn=_cmd_validate)
 
     pf = sub.add_parser("failures", help="group the failed runs of a saved result by failure label")
-    pf.add_argument("results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)")
+    pf.add_argument(
+        "results", nargs="?", default="results", help="a run directory, or a folder of them (newest is used)"
+    )
     pf.add_argument("--label", help="only show runs with this failure label, e.g. wrong_answer")
     pf.set_defaults(fn=_cmd_failures)
 

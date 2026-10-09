@@ -19,14 +19,16 @@ from agent_eval.models import ModelClient, ModelReply
 from agent_eval.runner import run_suite, summarize
 from agent_eval.tasks import Task
 
-TASK = Task.from_dict({
-    "id": "count-cities",
-    "category": "files",
-    "prompt": "How many cities are listed in cities.txt? Reply with just the number.",
-    "files": {"cities.txt": "Paris\nLagos\nLima\nOsaka\n"},
-    "checks": [{"type": "answer_equals", "value": "4"}],
-    "max_steps": 4,
-})
+TASK = Task.from_dict(
+    {
+        "id": "count-cities",
+        "category": "files",
+        "prompt": "How many cities are listed in cities.txt? Reply with just the number.",
+        "files": {"cities.txt": "Paris\nLagos\nLima\nOsaka\n"},
+        "checks": [{"type": "answer_equals", "value": "4"}],
+        "max_steps": 4,
+    }
+)
 
 
 class RuleBasedModel(ModelClient):
@@ -48,8 +50,10 @@ class RuleBasedModel(ModelClient):
 def main() -> dict:
     runs = run_suite(RuleBasedModel(), [TASK], repeats=3)
     for run in runs:
-        print(f"trial {run.trial + 1}: {'PASS' if run.passed else 'FAIL'} "
-              f"answer={run.agent.final_answer!r} steps={run.agent.num_steps}")
+        print(
+            f"trial {run.trial + 1}: {'PASS' if run.passed else 'FAIL'} "
+            f"answer={run.agent.final_answer!r} steps={run.agent.num_steps}"
+        )
     summary = summarize(runs)
     print()
     print(format_summary(summary))

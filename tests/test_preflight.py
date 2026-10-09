@@ -17,7 +17,7 @@ def test_missing_sdk_is_reported(monkeypatch):
     real = importlib.util.find_spec
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None if name == "anthropic" else real(name))
     problems = preflight("anthropic:claude-haiku-4-5")
-    assert problems == ['the \'anthropic\' package is not installed (pip install -e ".[anthropic]")']
+    assert problems == ["the 'anthropic' package is not installed (pip install -e \".[anthropic]\")"]
 
 
 def test_ready_when_sdk_and_key_present(monkeypatch):

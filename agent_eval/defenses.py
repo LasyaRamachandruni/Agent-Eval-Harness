@@ -16,8 +16,8 @@ pass them to `run_agent(..., defenses=...)`.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 # Tools whose output is content someone else may have written.
 UNTRUSTED_TOOLS = frozenset({"read_file", "list_files"})

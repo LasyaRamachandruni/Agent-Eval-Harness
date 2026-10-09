@@ -63,10 +63,21 @@ def test_cli_run_with_repeats_and_prices(tmp_path, monkeypatch, capsys):
     model = CountingModel([json.dumps({"final": "1"})] * 2 + [json.dumps({"final": "2"})])
     monkeypatch.setattr(cli, "load_model", lambda spec: model)
 
-    code = cli.main([
-        "run", "--model", "scripted", "--tasks", str(tmp_path / "tasks"), "--repeats", "3",
-        "--prices", str(tmp_path / "prices.json"), "--out", str(tmp_path / "results"),
-    ])
+    code = cli.main(
+        [
+            "run",
+            "--model",
+            "scripted",
+            "--tasks",
+            str(tmp_path / "tasks"),
+            "--repeats",
+            "3",
+            "--prices",
+            str(tmp_path / "prices.json"),
+            "--out",
+            str(tmp_path / "results"),
+        ]
+    )
     out = capsys.readouterr().out
     assert code == 0
     assert "2/3 runs passed" in out and "pass@3 100%" in out and "pass^3 0%" in out
