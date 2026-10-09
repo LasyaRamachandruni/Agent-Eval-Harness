@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
-from .agent import AgentResult, run_agent
+from .agent import AgentResult
+from .cache import sample_scope
 from .defenses import Defense
+from .environment import EvalItem
 from .failures import LABELS, classify_failure
+from .grading import CheckResult
 from .metrics import success_variance, suite_pass_at_k, suite_pass_hat_k
 from .models import ModelClient
 from .pricing import estimate_cost
-from .tasks import CheckResult, Task, run_check
-from .tools import Workspace, build_tools
+from .strategies import Strategy, get_strategy
 
 
 @dataclass
@@ -37,51 +41,64 @@ class TaskRun:
     failure_reason: str | None = None
     # Names of the injection defenses the agent ran with (empty = baseline).
     defenses: list[str] = field(default_factory=list)
+    # Benchmark metrics that are not pass/fail, e.g. {"em": 1.0, "f1": 1.0} for HotpotQA.
+    scores: dict[str, float] = field(default_factory=dict)
+    strategy: str = "react"
+    benchmark: str = "builtin"
+
+    @classmethod
+    def from_record(cls, d: dict[str, Any]) -> TaskRun:
+        """Rebuild a run from one line of runs.jsonl (used to resume and to re-summarise)."""
+        data = dict(d)
+        data["checks"] = [CheckResult(**c) for c in data.get("checks", [])]
+        data["injection_checks"] = [CheckResult(**c) for c in data.get("injection_checks", [])]
+        data["agent"] = AgentResult.from_dict(data["agent"])
+        known = set(cls.__dataclass_fields__)
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
-def run_label(model: str, defenses: list[str] | None) -> str:
-    """How a run is named in summaries and reports: the model plus any defenses."""
-    return f"{model} +{'+'.join(defenses)}" if defenses else model
+def run_label(model: str, defenses: list[str] | None, strategy: str = "react") -> str:
+    """How a run is named in summaries and reports: the model, its strategy (if not react) and any defenses."""
+    label = model if strategy == "react" else f"{model} [{strategy}]"
+    return f"{label} +{'+'.join(defenses)}" if defenses else label
 
 
-def _grade(checks: list[dict], task: Task, result: AgentResult, ws: Workspace) -> list[CheckResult]:
-    graded = []
-    for check in checks:
-        check = dict(check)
-        if check.get("type") == "file_unchanged":
-            check["_original"] = task.files.get(check["path"])
-        graded.append(run_check(check, result, ws))
-    return graded
-
-
-def run_task(model: ModelClient, task: Task, trial: int = 0, defenses: list[Defense] | None = None) -> TaskRun:
-    """Run one task and grade it.
+def run_task(
+    model: ModelClient,
+    task: EvalItem,
+    trial: int = 0,
+    defenses: list[Defense] | None = None,
+    strategy: Strategy | None = None,
+    benchmark: str = "builtin",
+) -> TaskRun:
+    """Run one task (or benchmark item) with `strategy` (default: react) and grade it.
 
     For injection tasks, a run passes only if it completes the task AND resists
     the attack; `resisted` records the second part on its own. Failed runs are
     labelled with a failure category (`failure`, `failure_reason`). `defenses`
-    are passed to the agent loop (see defenses.py).
+    are passed to the agent (see defenses.py). Model calls are cached under
+    sample index `trial`, so repeated trials are independent samples.
     """
     defenses = defenses or []
-    ws = Workspace(files=dict(task.files))
-    result = run_agent(model, task.prompt, build_tools(ws), max_steps=task.max_steps, defenses=defenses)
-    checks = _grade(task.checks, task, result, ws)
-    resisted, inj_checks = None, []
-    if task.injection is not None:
-        inj_checks = _grade(task.injection["checks"], task, result, ws)
-        resisted = all(c.passed for c in inj_checks)
-    passed = result.stop_reason == "final" and all(c.passed for c in checks) and resisted is not False
+    strategy = strategy or get_strategy("react")
+    env = task.make_env()
+    with sample_scope(trial):
+        result = strategy.run(model, task.prompt, env, max_steps=task.max_steps, defenses=defenses)
+    grade = task.grade(result, env)
     run = TaskRun(
         task.id,
         task.category,
         model.name,
-        passed,
-        checks,
+        grade.passed,
+        grade.checks,
         result,
         trial,
-        resisted,
-        inj_checks,
+        grade.resisted,
+        grade.injection_checks,
         defenses=[d.name for d in defenses],
+        scores=dict(grade.scores),
+        strategy=strategy.label,
+        benchmark=benchmark,
     )
     label = classify_failure(run)
     if label:
@@ -91,18 +108,24 @@ def run_task(model: ModelClient, task: Task, trial: int = 0, defenses: list[Defe
 
 def run_suite(
     model: ModelClient,
-    tasks: list[Task],
+    tasks: list[Any],
     repeats: int = 1,
     on_run: Callable[[TaskRun], None] | None = None,
     defenses: list[Defense] | None = None,
+    strategy: Strategy | None = None,
+    benchmark: str = "builtin",
 ) -> list[TaskRun]:
-    """Run every task `repeats` times. `on_run` is called after each run (e.g. to print progress)."""
+    """Run every task `repeats` times, one at a time. `on_run` is called after each run.
+
+    For concurrency, rate-limit handling, caching and resume, see
+    `executor.run_suite_async`.
+    """
     if repeats < 1:
         raise ValueError("repeats must be at least 1")
     runs = []
     for task in tasks:
         for trial in range(repeats):
-            run = run_task(model, task, trial, defenses)
+            run = run_task(model, task, trial, defenses, strategy, benchmark)
             if on_run:
                 on_run(run)
             runs.append(run)
@@ -124,6 +147,24 @@ def _avg_cost(runs: list[TaskRun], prices: dict | None) -> float | None:
     if len(known) != len(costs) or not known:
         return None
     return round(sum(known) / len(known), 6)
+
+
+def _mean_scores(runs: list[TaskRun]) -> dict[str, float]:
+    """Average of each benchmark score over the runs that report it."""
+    totals: dict[str, list[float]] = {}
+    for r in runs:
+        for key, value in r.scores.items():
+            totals.setdefault(key, []).append(float(value))
+    return {key: round(sum(v) / len(v), 4) for key, v in totals.items()}
+
+
+def _billed_cost(runs: list[TaskRun], prices: dict | None) -> float | None:
+    """What the runs actually cost: tokens of calls not served from the response cache."""
+    costs = [estimate_cost(r.model, r.agent.billed_input_tokens, r.agent.billed_output_tokens, prices) for r in runs]
+    known = [c for c in costs if c is not None]
+    if len(known) != len(costs):
+        return None
+    return round(sum(known), 6)
 
 
 def injection_summary(runs: list[TaskRun]) -> dict | None:
@@ -211,6 +252,8 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
             "avg_seconds": _avg([r.agent.seconds for r in rs], 3),
             "avg_cost_usd": _avg_cost(rs, prices),
         }
+        if rs[0].scores:
+            per_task[tid]["scores"] = _mean_scores(rs)
         if rs[0].resisted is not None:
             per_task[tid]["resisted"] = sum(bool(r.resisted) for r in rs)
         labels = [r.failure for r in rs if r.failure]
@@ -224,7 +267,9 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
     return {
         "model": runs[0].model,
         "defenses": list(runs[0].defenses),
-        "label": run_label(runs[0].model, runs[0].defenses),
+        "label": run_label(runs[0].model, runs[0].defenses, runs[0].strategy),
+        "strategy": runs[0].strategy,
+        "benchmark": runs[0].benchmark,
         "tasks": len(by_task),
         "repeats": repeats,
         "runs": n,
@@ -241,6 +286,10 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
         "tool_errors": sum(r.agent.tool_errors for r in runs),
         "input_tokens": sum(r.agent.input_tokens for r in runs),
         "output_tokens": sum(r.agent.output_tokens for r in runs),
+        "model_calls": sum(r.agent.model_calls for r in runs),
+        "cached_calls": sum(r.agent.cached_calls for r in runs),
+        "billed_cost_usd": _billed_cost(runs, prices),
+        "scores": _mean_scores(runs),
         "avg_cost_per_run_usd": avg_cost,
         "total_cost_usd": None if avg_cost is None else round(avg_cost * n, 6),
         "injection": injection_summary(runs),
@@ -258,17 +307,36 @@ def summarize(runs: list[TaskRun], prices: dict | None = None) -> dict:
     }
 
 
+def slugify(label: str) -> str:
+    """A label made safe for a directory name, e.g. "openai:gpt-4o [reflexion]" -> "openai_gpt-4o_reflexion"."""
+    slug = label.replace(":", "_").replace("/", "_").replace(" ", "")
+    slug = re.sub(r"[^A-Za-z0-9._+-]+", "_", slug).strip("_")
+    return slug or "run"
+
+
+def new_run_dir(out_dir: str | Path, label: str) -> Path:
+    """Create `<out_dir>/<UTC timestamp>_<label slug>` and return it."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = Path(out_dir) / f"{stamp}_{slugify(label)}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def write_summary(run_dir: str | Path, runs: list[TaskRun], prices: dict | None = None) -> dict:
+    """Write summary.json for `runs` into `run_dir` and return the summary."""
+    summary = summarize(runs, prices)
+    (Path(run_dir) / "summary.json").write_text(json.dumps(summary, indent=2))
+    return summary
+
+
 def save_results(runs: list[TaskRun], out_dir: str | Path, prices: dict | None = None) -> Path:
     """Write one JSONL line per task (with full trace) plus a summary.json."""
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    label = run_label(runs[0].model, runs[0].defenses) if runs else "none"
-    model_slug = label.replace(":", "_").replace("/", "_").replace(" ", "")
-    run_dir = Path(out_dir) / f"{stamp}_{model_slug}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    label = run_label(runs[0].model, runs[0].defenses, runs[0].strategy) if runs else "none"
+    run_dir = new_run_dir(out_dir, label)
     with open(run_dir / "runs.jsonl", "w") as f:
         for r in runs:
             f.write(json.dumps(asdict(r)) + "\n")
-    (run_dir / "summary.json").write_text(json.dumps(summarize(runs, prices), indent=2))
+    write_summary(run_dir, runs, prices)
     return run_dir
 
 
