@@ -1,7 +1,7 @@
 # Benchmark: agent strategies and models on tool use, multi-hop QA and code
 
-> **Status: results pending.** No model has been run yet: the benchmark needs
-> API keys, and none were available where this harness was built. Every
+> **Status: results pending.** No model has been run yet. The benchmark is
+> designed to cost $0: it runs open models locally through Ollama. Every
 > table below is filled in from one command,
 >
 > ```bash
@@ -30,24 +30,25 @@
 | Harness version | `<git commit>` (also in each run's `meta.json`) |
 | Date run | `<YYYY-MM-DD>` |
 | Hardware | `<machine; Ollama GPU/CPU>` |
-| Models | `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `gpt-4o-mini`, `llama3.1` (Ollama) |
+| Models | `llama3.1` (8B) and `qwen2.5:7b`, local through Ollama (no API cost) |
 | Strategies | `direct`, `react`, `reflection` (2 rounds), `reflexion` (3 trials) |
 | Protocol | JSON actions (`PROTOCOL=native` for provider tool calling) |
 | Benchmarks | built-in 40 tasks; HotpotQA dev distractor, 200 questions (seed 1234); HumanEval, 164 problems |
 | Trials per item | 5 |
 | Temperature | 0.7 |
-| Estimated cost | printed by the script before it runs (see below) |
-| Measured cost | `<sum of billed_cost_usd in the summaries>` |
+| Cost | $0 (local models); `<hours of GPU/CPU time>` |
 
 Reproduce with:
 
 ```bash
-pip install -e ".[anthropic,openai]"
-cp .env.example .env              # ANTHROPIC_API_KEY, OPENAI_API_KEY
-ollama pull llama3.1
+pip install -e .
+ollama serve &                         # models are pulled automatically
 DRY_RUN=1 scripts/run_real_models.sh   # the plan, no calls
-scripts/run_real_models.sh             # asks before spending; re-run to resume
+scripts/run_real_models.sh             # re-run to resume
 ```
+
+Or open `notebooks/colab_free_run.ipynb` in Colab with a T4 GPU (free); it
+keeps results and the cache on Google Drive so a disconnected session resumes.
 
 The script downloads and checksums the data, runs `agent-eval selfcheck`,
 checks every model's setup, prints `agent-eval plan` (an estimate of tokens
@@ -117,5 +118,5 @@ _Pending._
 - The HumanEval sandbox isolates model code written in good faith; it is not
   a security boundary.
 - Costs are estimates from list prices in `agent_eval/pricing.py`.
-- `claude-sonnet-4-5-20250929` is deprecated (retirement planned for
-  2026-11-30); a later run should replace it and say so here.
+- 7-8B open models are far weaker than frontier API models; compare
+  strategies on the same model rather than against published API numbers.

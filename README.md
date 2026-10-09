@@ -18,7 +18,7 @@ Most agent demos show one lucky run. This project asks the questions that matter
 
 ## Results
 
-**Real-model results are pending.** No API key was available where this version was built, so no model has been run yet and no model number appears in this repository. One command produces them: [`scripts/run_real_models.sh`](scripts/run_real_models.sh) (see [Benchmark](#benchmark)); it prints a cost estimate and asks before spending anything.
+**Real-model results are pending.** No model has been run yet, so no model number appears in this repository. One command produces them for $0 with local models: [`scripts/run_real_models.sh`](scripts/run_real_models.sh), or [`notebooks/colab_free_run.ipynb`](notebooks/colab_free_run.ipynb) on Colab's free GPU (see [Benchmark](#benchmark)).
 
 What has been measured, with no model involved, are checks that the graders are right (`agent-eval selfcheck humaneval`, 2 vCPU Intel Xeon @ 2.10GHz, Python 3.13, 2026-10-09):
 
@@ -348,17 +348,16 @@ newly hijacked (0)
 
 ## Benchmark
 
-**Real-model results are pending** (they need API keys). Everything is packaged as one command:
+**Real-model results are pending.** The benchmark is set up to cost nothing: by default it runs two open models locally through [Ollama](https://ollama.com), with no API key.
 
 ```bash
-pip install -e ".[anthropic,openai]"
-cp .env.example .env                    # ANTHROPIC_API_KEY, OPENAI_API_KEY; .env is git-ignored
-ollama pull llama3.1                    # for the local model
+pip install -e .
+ollama serve &                          # the script pulls llama3.1 and qwen2.5:7b if missing
 DRY_RUN=1 scripts/run_real_models.sh    # show the plan without calling any model
 scripts/run_real_models.sh              # download, check, estimate, ask, run, report
 ```
 
-It runs the 40 built-in tasks, HotpotQA-200 and HumanEval-164 with all four strategies on `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `gpt-4o-mini` and `llama3.1` (Ollama), 5 repeats each at temperature 0.7, and writes `results/real/<benchmark>/report.html` and `leaderboard.md`. Re-running it resumes. `MODELS`, `BENCHMARKS`, `STRATEGIES`, `REPEATS`, `BUDGET` and `PROTOCOL` narrow or change the plan; see the header of the script. The write-up template is [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
+It runs the 40 built-in tasks, HotpotQA-200 and HumanEval-164 with all four strategies on `llama3.1` (8B) and `qwen2.5:7b`, 5 repeats each at temperature 0.7, and writes `results/real/<benchmark>/report.html` and `leaderboard.md`. It is slow on a laptop CPU; [`notebooks/colab_free_run.ipynb`](notebooks/colab_free_run.ipynb) runs the same script on Colab's free T4 GPU and keeps results and the response cache on Google Drive, so a disconnected session resumes where it stopped. `MODELS`, `BENCHMARKS`, `STRATEGIES`, `REPEATS`, `BUDGET` and `PROTOCOL` narrow or change the plan; paid API models are opt-in, e.g. `MODELS="ollama:llama3.1 openai:gpt-4o-mini"`, and the script prints a cost estimate and asks before spending anything. The write-up template is [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
 
 The earlier [`scripts/run_benchmark.sh`](scripts/run_benchmark.sh) still runs the built-in suite with and without the injection defenses and writes the before/after comparisons.
 
@@ -447,7 +446,9 @@ agent_eval/
   logs.py         JSON (or text) structured logging
   cli.py          command line interface
 scripts/
-  run_real_models.sh  the real-model benchmark: every model, benchmark and strategy
+  run_real_models.sh  the real-model benchmark: every model, benchmark and strategy ($0 by default)
+notebooks/
+  colab_free_run.ipynb  the same benchmark on Colab's free GPU, resumable across sessions
   run_benchmark.sh    built-in suite with and without injection defenses
 docs/
   BENCHMARK.md        benchmark write-up (template until real results are in)
@@ -475,7 +476,7 @@ CI (GitHub Actions) runs lint, format and type checks, then the tests on Python 
 - **No framework dependency.** Each strategy is a short module on a two-method model interface, so a result can be traced to a prompt, and providers are swapped without changing agent code.
 - **Same tools, same graders.** Strategies differ only in how they use the model; HotpotQA retrieval is offline over the provided paragraphs, so differences come from the agent, not from a search API.
 - **Estimates, not bills.** Costs come from list prices in `agent_eval/pricing.py` and a token approximation (characters / 4); `summary.json` has the measured tokens after a run.
-- **Model availability.** `claude-sonnet-4-5-20250929` is deprecated (retirement planned for 2026-11-30) and `claude-haiku-4-5-20251001` may be retired soon after 2026-10-15; replace them in `MODELS` if the run is later.
+- **Open models by default.** The default benchmark uses 7-8B local models so anyone can reproduce it for free; they are much weaker than frontier API models, so the interesting comparison is between strategies on the same model, not against published API numbers.
 - **Sandbox.** Good isolation for benchmark code, not a security boundary against deliberately hostile code.
 - **Small suites.** 40 synthetic tasks, 200 HotpotQA questions and 164 HumanEval problems show relative behaviour, with wide confidence intervals at this size.
 
@@ -494,4 +495,4 @@ CI (GitHub Actions) runs lint, format and type checks, then the tests on Python 
 - [x] Agent strategies (direct, ReAct, Reflection, Reflexion) and native tool calling
 - [x] HotpotQA and HumanEval adapters with checksum-verified downloads and a code sandbox
 - [x] Concurrency, retries, response cache, resume, cost estimates and budgets
-- [ ] Benchmark write-up comparing real models (pending: needs API keys; `scripts/run_real_models.sh`)
+- [ ] Benchmark write-up with real models (pending: `scripts/run_real_models.sh`, free with local models)
