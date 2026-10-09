@@ -1,82 +1,121 @@
-# Benchmark: how reliable and how hijackable are real agents?
+# Benchmark: agent strategies and models on tool use, multi-hop QA and code
 
-> **Status: results pending.** This page is a template. The tables below are
-> filled in from `scripts/run_benchmark.sh`, which needs an API key and has not
-> been run yet. Nothing here should be read as a measured result until the
-> placeholders are replaced.
+> **Status: results pending.** No model has been run yet: the benchmark needs
+> API keys, and none were available where this harness was built. Every
+> table below is filled in from one command,
+>
+> ```bash
+> scripts/run_real_models.sh
+> ```
+>
+> and nothing on this page should be read as a measured model result until
+> the placeholders are replaced. The only measured numbers here are the
+> grader checks in [Harness checks](#harness-checks), which involve no model.
 
-## Question
+## Questions
 
-Given the same tools and the same 40 tasks, how often does each model finish
-the job, does it finish it *every* time, how easily can text inside a file
-take control of it, and do two cheap prompt-level defenses help without
-breaking ordinary work?
+1. Given identical tools, tasks and graders, which agent design gets the most
+   right per dollar: one direct call, ReAct, ReAct plus a critique
+   (Reflection), or retries with written lessons (Reflexion)?
+2. Is a model dependable, not just successful: how wide is the gap between
+   pass@5 and pass^5 at temperature 0.7?
+3. Do the gains hold outside the 40 synthetic tasks, on multi-hop question
+   answering (HotpotQA) and code (HumanEval)?
+4. How easily can text inside a file take control of each agent design?
 
 ## Setup
 
 | | |
 |---|---|
-| Harness version | `<git commit>` |
+| Harness version | `<git commit>` (also in each run's `meta.json`) |
 | Date run | `<YYYY-MM-DD>` |
-| Models | `<model 1>`, `<model 2>`, ... |
-| Tasks | 40 (files 10, reasoning 8, multi-step 5, robustness 7, injection 10) |
-| Trials per task | `<REPEATS>` |
-| Temperature | 0 |
-| Defenses (second run) | `hardened_prompt` + `tag_untrusted` |
-| Total estimated cost | `<$ from the leaderboard>` |
+| Hardware | `<machine; Ollama GPU/CPU>` |
+| Models | `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `gpt-4o-mini`, `llama3.1` (Ollama) |
+| Strategies | `direct`, `react`, `reflection` (2 rounds), `reflexion` (3 trials) |
+| Protocol | JSON actions (`PROTOCOL=native` for provider tool calling) |
+| Benchmarks | built-in 40 tasks; HotpotQA dev distractor, 200 questions (seed 1234); HumanEval, 164 problems |
+| Trials per item | 5 |
+| Temperature | 0.7 |
+| Estimated cost | printed by the script before it runs (see below) |
+| Measured cost | `<sum of billed_cost_usd in the summaries>` |
 
 Reproduce with:
 
 ```bash
-pip install -e ".[anthropic]"            # and/or .[openai]
-cp .env.example .env                     # add your API key(s)
-scripts/run_benchmark.sh                 # or: scripts/run_benchmark.sh MODEL [MODEL ...]
+pip install -e ".[anthropic,openai]"
+cp .env.example .env              # ANTHROPIC_API_KEY, OPENAI_API_KEY
+ollama pull llama3.1
+DRY_RUN=1 scripts/run_real_models.sh   # the plan, no calls
+scripts/run_real_models.sh             # asks before spending; re-run to resume
 ```
 
-The script runs every model without and then with defenses, writes
-`results/benchmark/report.html`, and writes the Markdown tables used below
-(`leaderboard.md` and one `compare_<model>.md` per model).
+The script downloads and checksums the data, runs `agent-eval selfcheck`,
+checks every model's setup, prints `agent-eval plan` (an estimate of tokens
+and cost per model, benchmark and strategy) and asks for confirmation. Results
+go to `results/real/<benchmark>/<model>_<strategy>_<protocol>/`, with
+`report.html` and `leaderboard.md` per benchmark.
+
+## Harness checks
+
+Measured on 2026-10-09 on a 2 vCPU Intel Xeon @ 2.10GHz, Python 3.13, with
+`agent-eval selfcheck humaneval` (no model involved):
+
+| Check | Result |
+|---|---|
+| HumanEval canonical solutions pass their hidden tests in the sandbox | 164/164 |
+| Docstring examples agree with the canonical solution (Reflexion's visible self-check) | 73/75; HumanEval/47 and HumanEval/116 have wrong examples in the dataset |
+
+Pending (the build environment could not download HotpotQA):
+`agent-eval download hotpotqa && agent-eval selfcheck hotpotqa`, which reports
+whether every gold answer scores exact match 1.0 through the grader, and how
+often `search(question)` returns both supporting paragraphs in its top 3.
 
 ## Results
 
-### Leaderboard
+### Built-in tasks (40 tasks x 5 trials)
 
-<!-- paste results/benchmark/leaderboard.md here -->
+<!-- paste results/real/builtin/leaderboard.md -->
 
 _Pending._
 
-### Effect of the defenses
+### HotpotQA-200 (exact match, F1)
 
-<!-- paste each results/benchmark/compare_<model>.md here, one subsection per model -->
+<!-- paste results/real/hotpotqa/leaderboard.md -->
+
+_Pending._
+
+### HumanEval (pass@1, pass^5)
+
+<!-- paste results/real/humaneval/leaderboard.md -->
+
+_Pending._
+
+### Effect of the injection defenses
+
+<!-- scripts/run_benchmark.sh: paste results/benchmark/compare_<model>.md -->
 
 _Pending._
 
 ## Findings
 
-<!-- 3-5 short points, each backed by a number from the tables above. Prompts:
-- Which model is most dependable (pass^k), not just most successful?
-- Where is the gap between pass@k and pass^k widest, and on which tasks?
-- Which injection tasks hijacked the most models? (see the per-task grid in report.html)
-- Did the defenses raise resistance, and did they break any ordinary tasks?
-- What is the most common failure label per model, and what would fix it?
+<!-- 3-5 short points, each backed by a number from the tables above:
+- Which strategy gives the best success per dollar on each benchmark?
+- Does reflexion beat react by more than the run-to-run noise (pass@5 vs pass^5)?
+- Does direct (all paragraphs inline) beat react's search on HotpotQA?
+- Which injection tasks hijacked the most strategies? Does a critique step help?
+- Most common failure label per model, and what would fix it?
 -->
-
-_Pending._
-
-## Example failures
-
-<!-- One or two short traces from runs.jsonl that show a failure label in
-action, e.g. a followed_injection run on inj-fake-tool-result. Use
-`agent-eval failures results/benchmark/<run-dir> --label followed_injection`. -->
 
 _Pending._
 
 ## Limitations
 
-- 40 small, synthetic tasks: results show relative behaviour on this suite,
-  not general capability.
-- One prompt format (a JSON action per turn) for every model; models with
-  native tool calling might do better with it.
+- Small suites: 40 synthetic tasks, 200 HotpotQA questions, 164 HumanEval
+  problems. Differences of a few points are within noise at this size.
+- HotpotQA retrieval is over the 10 provided paragraphs, not open Wikipedia;
+  it measures multi-hop reading, not search.
+- The HumanEval sandbox isolates model code written in good faith; it is not
+  a security boundary.
 - Costs are estimates from list prices in `agent_eval/pricing.py`.
-- The defenses only change prompts; they are a baseline, not a full
-  security design.
+- `claude-sonnet-4-5-20250929` is deprecated (retirement planned for
+  2026-11-30); a later run should replace it and say so here.
