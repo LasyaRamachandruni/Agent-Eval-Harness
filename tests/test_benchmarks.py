@@ -223,3 +223,24 @@ def test_download_errors(tmp_path):
     with pytest.raises(ValueError, match="unknown benchmark"):
         load_benchmark("mmlu")
     assert len(load_benchmark("builtin", limit=3)) == 3
+
+
+def test_selfchecks(tmp_path, monkeypatch, capsys):
+    from agent_eval import cli
+    from agent_eval.benchmarks.selfcheck import check_hotpotqa, check_humaneval
+
+    he = check_humaneval([HumanEvalItem(PROBLEM)])
+    assert [(c.passed, c.total) for c in he] == [(1, 1), (1, 1)]
+    hp = check_hotpotqa([HotpotItem(HotpotQuestion.from_record(RECORD))])
+    assert hp[0].passed == 1 and hp[1].total == 1
+    assert hp[0].line().startswith("gold answers score exact match: 1/1")
+
+    payload = gz_lines([PROBLEM.__dict__])
+    monkeypatch.setitem(
+        dl.DATASETS, "humaneval", dl.Dataset("humaneval", "http://x", "humaneval/HumanEval.jsonl.gz", records=1)
+    )
+    dl.download(["humaneval"], tmp_path, opener=opener_for(payload))
+    assert cli.main(["selfcheck", "humaneval", "--data-dir", str(tmp_path)]) == 0
+    assert "canonical solutions pass hidden tests: 1/1" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="download hotpotqa"):
+        cli.main(["selfcheck", "hotpotqa", "--data-dir", str(tmp_path)])

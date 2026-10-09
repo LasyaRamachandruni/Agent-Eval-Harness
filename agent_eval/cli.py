@@ -193,6 +193,23 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_selfcheck(args: argparse.Namespace) -> int:
+    from .benchmarks.selfcheck import check_hotpotqa, check_humaneval
+
+    settings = _settings()
+    data_dir = Path(args.data_dir) if args.data_dir else settings.data_dir
+    for name in args.benchmarks:
+        try:
+            items = load_benchmark(name, data_dir)
+        except (MissingDataError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
+        checks = check_humaneval(items) if name == "humaneval" else check_hotpotqa(items)
+        print(f"{name} ({len(items)} items)")
+        for c in checks:
+            print(f"  {c.line()}")
+    return 0
+
+
 def _cmd_download(args: argparse.Namespace) -> int:
     settings = _settings()
     data_dir = Path(args.data_dir) if args.data_dir else settings.data_dir
@@ -402,6 +419,11 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
     _add_selection(pe)
     pe.set_defaults(fn=_cmd_estimate)
+
+    psc = sub.add_parser("selfcheck", help="check benchmark grading with reference answers (no model calls)")
+    psc.add_argument("benchmarks", nargs="+", choices=["hotpotqa", "humaneval"])
+    psc.add_argument("--data-dir", help="benchmark data folder (default: $AGENT_EVAL_DATA_DIR or data)")
+    psc.set_defaults(fn=_cmd_selfcheck)
 
     pw = sub.add_parser("download", help="download benchmark data (HotpotQA, HumanEval) and verify checksums")
     pw.add_argument("datasets", nargs="+", help="hotpotqa, humaneval or all")
