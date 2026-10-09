@@ -19,12 +19,13 @@ def dry_run(**env):
     return [line[2:] for line in out.stdout.splitlines() if line.startswith("+ ")]
 
 
-def test_default_plan_covers_every_model_benchmark_and_strategy():
+def test_default_plan_is_free_and_covers_every_benchmark_and_strategy():
     cmds = dry_run()
     runs = [c for c in cmds if " run --model " in c]
-    assert len(runs) == 4 * 3 * 4  # models x benchmarks x strategies
+    assert len(runs) == 2 * 3 * 4  # models x benchmarks x strategies
     assert all("--repeats 5" in c and "--temperature 0.7" in c for c in runs)
-    assert any("ollama:llama3.1" in c and "--concurrency 1" in c for c in runs)
+    assert all(" --model ollama:" in c and "--concurrency 1" in c for c in runs)  # free local models only
+    assert any("ollama:qwen2.5:7b" in c for c in runs)
     assert cmds[0].endswith("download hotpotqa humaneval")
     assert any(" plan " in c for c in cmds)
     reports = [c for c in cmds if " report " in c]

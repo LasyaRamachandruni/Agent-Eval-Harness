@@ -3,8 +3,11 @@
 #
 #   the 40 built-in tasks + HotpotQA-200 + HumanEval (164)
 #   x every strategy (direct, react, reflection, reflexion)
-#   x claude-haiku-4-5, claude-sonnet-4-5, gpt-4o-mini, llama3.1 (Ollama)
+#   x llama3.1 and qwen2.5:7b on Ollama (local, free: no API key, $0)
 #   x 5 repeats at temperature 0.7 (for pass^k)
+#
+# Paid API models are opt-in through MODELS, e.g.
+#   MODELS="ollama:llama3.1 openai:gpt-4o-mini" scripts/run_real_models.sh
 #
 # It downloads and verifies the data, checks every model is ready, prints a cost
 # estimate and asks before spending anything. Results go to $OUT/<benchmark>/,
@@ -20,7 +23,8 @@
 #   STRATEGIES="react reflexion" BENCHMARKS="humaneval" scripts/run_real_models.sh
 #
 # Settings (environment variables, all optional):
-#   MODELS        space-separated model specs (default: the four above)
+#   MODELS        space-separated model specs (default: the two Ollama models above)
+#   PULL=1        pull missing Ollama models automatically (default; PULL=0 to stop instead)
 #   BENCHMARKS    builtin hotpotqa humaneval
 #   STRATEGIES    direct react reflection reflexion
 #   REPEATS=5  TEMPERATURE=0.7  PROTOCOL=json  CONCURRENCY=4  OLLAMA_CONCURRENCY=1
@@ -28,8 +32,8 @@
 #   OUT=results/real
 #   SKIP_UNREADY=1  drop models that fail the setup check instead of stopping
 #
-# API keys come from the environment or a .env file in the repo root:
-#   ANTHROPIC_API_KEY, OPENAI_API_KEY (and OLLAMA_HOST if Ollama is not local).
+# Ollama must be running (ollama serve); set OLLAMA_HOST if it is not local.
+# Paid models read ANTHROPIC_API_KEY / OPENAI_API_KEY from the environment or .env.
 # This script never prints them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -38,7 +42,7 @@ if [ -f .env ]; then
   set -a; . ./.env; set +a
 fi
 
-DEFAULT_MODELS="anthropic:claude-haiku-4-5-20251001 anthropic:claude-sonnet-4-5-20250929 openai:gpt-4o-mini ollama:llama3.1"
+DEFAULT_MODELS="ollama:llama3.1 ollama:qwen2.5:7b"
 read -r -a MODELS <<< "${MODELS:-$DEFAULT_MODELS}"
 read -r -a BENCHMARKS <<< "${BENCHMARKS:-builtin hotpotqa humaneval}"
 read -r -a STRATEGIES <<< "${STRATEGIES:-direct react reflection reflexion}"
@@ -52,6 +56,7 @@ OUT="${OUT:-results/real}"
 YES="${YES:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 SKIP_UNREADY="${SKIP_UNREADY:-0}"
+PULL="${PULL:-1}"
 PY="${PYTHON:-python}"
 CLI=("$PY" -m agent_eval)
 
@@ -77,6 +82,11 @@ echo
 echo "== model setup"
 ready=()
 for m in "${MODELS[@]}"; do
+  if [ "$DRY_RUN" != "1" ] && [ "$PULL" = "1" ] && [[ "$m" == ollama:* ]] && command -v ollama >/dev/null \
+     && ! "${CLI[@]}" check --model "$m" >/dev/null; then
+    echo "pulling ${m#ollama:}"
+    ollama pull "${m#ollama:}" || true
+  fi
   if [ "$DRY_RUN" = "1" ] || "${CLI[@]}" check --model "$m"; then
     ready+=("$m")
   elif [ "$SKIP_UNREADY" = "1" ]; then
