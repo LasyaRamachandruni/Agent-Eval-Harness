@@ -18,7 +18,7 @@ What it does, in layers:
 
 This is good isolation for benchmark code written by a model in good faith.
 It is not a security boundary against deliberately malicious code; for that,
-run the whole harness in a container with `--network none`.
+run the harness in a disposable container or VM.
 """
 
 from __future__ import annotations
