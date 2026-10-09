@@ -45,7 +45,7 @@ def test_anthropic_client(monkeypatch):
     assert (reply.text, reply.input_tokens, reply.output_tokens) == ('{"final": "4"}', 12, 3)
     assert endpoint.kwargs["system"] == "SYS"
     assert endpoint.kwargs["messages"] == MESSAGES
-    assert endpoint.kwargs["temperature"] == 0
+    assert endpoint.kwargs["temperature"] == 0.7
 
 
 def test_openai_client(monkeypatch):

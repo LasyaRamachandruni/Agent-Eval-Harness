@@ -13,6 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .models import ToolSpec
+
 
 class ToolError(Exception):
     """Raised when a tool is called with bad arguments or fails."""
@@ -129,6 +131,19 @@ class Tool:
         if extra:
             raise ToolError(f"unknown argument(s) for {self.name}: {', '.join(extra)}")
         return self.fn(**args)
+
+    def spec(self) -> ToolSpec:
+        """This tool as a JSON-schema spec for native tool calling (all arguments are strings)."""
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {p: {"type": "string", "description": d} for p, d in self.params.items()},
+                "required": list(self.params),
+                "additionalProperties": False,
+            },
+        )
 
 
 def build_tools(ws: Workspace) -> dict[str, Tool]:
