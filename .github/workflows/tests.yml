@@ -5,6 +5,23 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Ruff lint
+        run: ruff check agent_eval tests examples scripts
+      - name: Ruff format
+        run: ruff format --check agent_eval tests examples scripts
+      - name: Mypy
+        run: mypy
+
   pytest:
     runs-on: ubuntu-latest
     strategy:
@@ -20,7 +37,7 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q --cov-report=xml
       - name: Validate tasks
         run: |
           agent-eval validate tasks
