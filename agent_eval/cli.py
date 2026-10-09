@@ -118,7 +118,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         items=len(items),
     )
     label = run_label(model.name, config.defenses, strategy.label)
-    run_dir = Path(args.resume) if args.resume else new_run_dir(args.out, label)
+    if args.resume and args.run_dir:
+        raise SystemExit("use either --resume or --run-dir, not both")
+    if args.resume and not (Path(args.resume) / "meta.json").exists():
+        raise SystemExit(f"nothing to resume in {args.resume} (no meta.json)")
+    run_dir = Path(args.resume or args.run_dir or new_run_dir(args.out, label))
     try:
         result_log = ResultLog(run_dir, config)
     except ResumeError as exc:
@@ -207,6 +211,43 @@ def _cmd_selfcheck(args: argparse.Namespace) -> int:
         print(f"{name} ({len(items)} items)")
         for c in checks:
             print(f"  {c.line()}")
+    return 0
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    settings = _settings()
+    data_dir = Path(args.data_dir) if args.data_dir else settings.data_dir
+    prices = load_prices(args.prices) if args.prices else None
+    benchmarks = args.benchmarks.split(",")
+    strategies = args.strategies.split(",")
+    unknown = [b for b in benchmarks if b not in BENCHMARKS] + [s for s in strategies if s not in STRATEGIES]
+    if unknown:
+        raise SystemExit(f"unknown benchmark or strategy: {', '.join(unknown)}")
+    total = None
+    print(
+        f"{'model':<40} {'benchmark':<10} {'strategy':<11} {'runs':>6} "
+        f"{'in tokens':>10} {'out tokens':>10} {'cost':>10}"
+    )
+    for bench in benchmarks:
+        try:
+            items = load_benchmark(bench, data_dir, args.tasks)
+        except MissingDataError as exc:
+            raise SystemExit(str(exc)) from exc
+        for spec in args.model:
+            for strat in strategies:
+                est = estimate_run(spec, items, strat, bench, args.repeats, args.protocol, prices)
+                cost = "?" if est.cost_usd is None else f"${est.cost_usd:,.2f}"
+                print(
+                    f"{spec:<40} {bench:<10} {strat:<11} {est.runs:>6} "
+                    f"{est.input_tokens / 1e6:>9.2f}M {est.output_tokens / 1e6:>9.2f}M {cost:>10}"
+                )
+                total = est if total is None else total + est
+    if total is not None:
+        cost = "unknown (a model has no price)" if total.cost_usd is None else f"${total.cost_usd:,.2f}"
+        print(
+            f"total: {total.runs} runs, {total.input_tokens / 1e6:.1f}M input + "
+            f"{total.output_tokens / 1e6:.1f}M output tokens, estimated {cost}"
+        )
     return 0
 
 
@@ -411,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--budget", type=float, help="stop starting new runs once this many USD are spent")
     pr.add_argument("--no-cache", action="store_true", help="do not read or write the response cache")
     pr.add_argument("--resume", help="continue an interrupted run directory instead of starting a new one")
+    pr.add_argument("--run-dir", help="write to exactly this directory, resuming it if it already holds a run")
     pr.add_argument("--out", default="results")
     pr.add_argument("-v", "--verbose", action="store_true", help="show failed checks")
     pr.set_defaults(fn=_cmd_run)
@@ -424,6 +466,17 @@ def main(argv: list[str] | None = None) -> int:
     psc.add_argument("benchmarks", nargs="+", choices=["hotpotqa", "humaneval"])
     psc.add_argument("--data-dir", help="benchmark data folder (default: $AGENT_EVAL_DATA_DIR or data)")
     psc.set_defaults(fn=_cmd_selfcheck)
+
+    pn = sub.add_parser("plan", help="estimate the cost of a whole benchmark plan (models x benchmarks x strategies)")
+    pn.add_argument("--model", action="append", required=True, help="model spec; repeat for several models")
+    pn.add_argument("--benchmarks", default=",".join(BENCHMARKS), help="comma-separated (default: all)")
+    pn.add_argument("--strategies", default=",".join(STRATEGIES), help="comma-separated (default: all)")
+    pn.add_argument("--protocol", default="json", choices=PROTOCOLS)
+    pn.add_argument("--repeats", type=int, default=5)
+    pn.add_argument("--tasks", default="tasks", help="task folder for the builtin benchmark")
+    pn.add_argument("--data-dir", help="benchmark data folder (default: $AGENT_EVAL_DATA_DIR or data)")
+    pn.add_argument("--prices", help="JSON file of per-model prices")
+    pn.set_defaults(fn=_cmd_plan)
 
     pw = sub.add_parser("download", help="download benchmark data (HotpotQA, HumanEval) and verify checksums")
     pw.add_argument("datasets", nargs="+", help="hotpotqa, humaneval or all")

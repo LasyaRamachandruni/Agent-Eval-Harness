@@ -229,3 +229,30 @@ def test_report_shows_strategy_and_f1(tmp_path):
     assert [r["model"] for r in rows] == ["openai:gpt-4o-mini", "openai:gpt-4o-mini [reflexion]"]
     assert rows[0]["f1"] == 0.5 and rows[1]["benchmark"] == "hotpotqa"
     assert "<th>F1</th>" in render_html(runs) and "| F1 |" in render_markdown(runs)
+
+
+def test_cli_run_dir_creates_then_resumes(tmp_path, monkeypatch, capsys):
+    model = reader()
+    monkeypatch.setattr(cli, "load_model", lambda spec, params=None: model)
+    argv = ["run", "--model", "openai:gpt-4o-mini", "--only", "find-owner", "--run-dir", str(tmp_path / "fixed")]
+    assert cli.main(argv) == 0
+    calls = len(model.calls)
+    assert cli.main(argv) == 0
+    assert len(model.calls) == calls and (tmp_path / "fixed" / "summary.json").exists()
+    with pytest.raises(SystemExit, match="not both"):
+        cli.main([*argv, "--resume", str(tmp_path / "fixed")])
+    with pytest.raises(SystemExit, match="nothing to resume"):
+        cli.main(["run", "--model", "openai:gpt-4o-mini", "--resume", str(tmp_path / "missing")])
+
+
+def test_cli_plan(capsys):
+    assert (
+        cli.main(["plan", "--model", "openai:gpt-4o-mini", "--benchmarks", "builtin", "--strategies", "react,direct"])
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "builtin    react" in out and "total: 400 runs" in out
+    with pytest.raises(SystemExit, match="unknown benchmark or strategy"):
+        cli.main(["plan", "--model", "x:y", "--strategies", "cot"])
+    with pytest.raises(SystemExit, match="download humaneval"):
+        cli.main(["plan", "--model", "x:y", "--benchmarks", "humaneval"])
