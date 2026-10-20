@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- CI now also runs the test suite on Python 3.13, and the package metadata lists the supported Python versions.
+
 ## 1.1.0 — 2026-10-09
 
 - **Agent strategies**: `--strategy direct|react|reflection|reflexion`, ported from Basic_-React_Agent_Langchain, Langgraph_Reflection_Agent and Neural-Reflexion-Agent onto the harness's own model interface. Reflexion uses the grounding check and stop-when-no-improvement score from Neural-Reflexion-Agent.

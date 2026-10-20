@@ -469,7 +469,7 @@ ruff check . && ruff format --check . && mypy
 python -m pytest            # with a coverage report
 ```
 
-CI (GitHub Actions) runs lint, format and type checks, then the tests on Python 3.10-3.12, task validation, the library example and the offline demo. Development tools are pinned in `pyproject.toml`; the package itself has no runtime dependencies beyond the optional provider SDKs.
+CI (GitHub Actions) runs lint, format and type checks, then the tests on Python 3.10-3.13, task validation, the library example and the offline demo. Development tools are pinned in `pyproject.toml`; the package itself has no runtime dependencies beyond the optional provider SDKs.
 
 ## Design choices and limits
 
