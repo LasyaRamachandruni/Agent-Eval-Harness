@@ -46,6 +46,7 @@ def test_variance():
     assert success_variance(4, 4) == 0.0
     assert success_variance(4, 0) == 0.0
     assert success_variance(4, 2) == 0.25
+    assert success_variance(0, 0) == 0.0  # a task that never ran has no spread
 
 
 def test_suite_averages():

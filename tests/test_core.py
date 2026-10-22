@@ -22,6 +22,8 @@ def final(answer):
 
 def test_calculator_basic():
     assert calculator("(1234 * 56) - 789") == "68315"
+    assert calculator("-(3 + 4) * 2") == "-14"
+    assert calculator("+5 // 2") == "2"
     assert calculator("7 / 2") == "3.5"
 
 

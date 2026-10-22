@@ -49,6 +49,12 @@ def test_retry_after_header():
     assert retry_after(ValueError()) is None
 
 
+def test_retry_after_ignores_headers_it_cannot_read():
+    # some SDKs attach headers as a list of pairs, which has no .get()
+    assert retry_after(RateLimitError([("retry-after", "7")])) is None
+    assert retry_after(RateLimitError({"retry-after": "-3"})) == 0.0  # never wait a negative time
+
+
 def test_retries_rate_limits_with_backoff_then_succeeds():
     waits = []
     model = RetryingModel(flaky([RateLimitError(), RateLimitError()]), sleep=waits.append, rng=random.Random(0))
