@@ -3,6 +3,7 @@
 ## Unreleased
 
 - CI now also runs the test suite on Python 3.13, and the package metadata lists the supported Python versions.
+- `agent-eval --version` prints the installed version, and a test keeps it in step with `pyproject.toml`.
 
 ## 1.1.0 — 2026-10-09
 

@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .benchmarks import BENCHMARKS, MissingDataError, load_benchmark
 from .benchmarks.download import DownloadError, download
 from .compare import compare_runs, find_saved_run, format_comparison, format_comparison_markdown
@@ -433,6 +434,7 @@ def _add_selection(p: argparse.ArgumentParser) -> None:
 def main(argv: list[str] | None = None) -> int:
     """Parse the command line and run the chosen subcommand; returns the exit code."""
     p = argparse.ArgumentParser(prog="agent-eval", description="Evaluate LLM agents on tool-using tasks.")
+    p.add_argument("--version", action="version", version=f"agent-eval {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     pl = sub.add_parser("list", help="list tasks")
